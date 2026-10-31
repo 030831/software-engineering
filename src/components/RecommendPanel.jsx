@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { addDays, addMinutes, format, isSameDay, parseISO, startOfDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { CalendarCheck, Plus, Sparkles, X } from 'lucide-react'
+import { CalendarCheck, Plus, Sparkles } from 'lucide-react'
 import { useStore } from '../store/AppStore'
 import { busyIntervalsFor } from '../lib/events'
 import { bestStartInWindow, freeWindows, startCandidates } from '../lib/recommend'
@@ -22,13 +22,14 @@ const lengthLabel = (min) => {
 }
 const dayLabel = (date) => format(parseISO(date), 'M/d (EEE)', { locale: ko })
 const hm = (d) => format(d, 'HH:mm')
+const toLocal = (d) => format(d, "yyyy-MM-dd'T'HH:mm")
 // 시작이 같은 구간이 여럿일 수 있어(예: 11:30–13:00 모두 / 11:30–18:00 일부) 끝과 인원까지 넣는다
 const windowKey = (w) => `${w.start.toISOString()}-${w.end.toISOString()}-${w.available}`
 
 // 흐름: 정할 일정(날짜·길이 정해짐) 고르기 → 그날 빈 구간 고르기 → 막대에서 시작 시간 정하기 → 확정(한 번만)
-// 또는 고른 시간을 후보로 올려 팀원들이 원하는 시간을 투표하고, 후보 중 하나로 확정 (임시)
+// 또는 노란 박스의 시간에 투표해 팀원들이 원하는 시간을 모으고, 그중 하나로 확정 (임시)
 export default function RecommendPanel({ team, members }) {
-  const { state, me, addRequest, scheduleRequest, addCandidate, removeCandidate, vote } = useStore()
+  const { state, me, addRequest, scheduleRequest, setVote, clearVote } = useStore()
   // 날짜가 지난 요청은 고를 시간이 없으니 목록에서 숨긴다
   const today = format(new Date(), 'yyyy-MM-dd')
   const openRequests = state.requests.filter((r) => r.team_id === team.id && r.status === 'open')
@@ -49,10 +50,18 @@ export default function RecommendPanel({ team, members }) {
   const full = windows.filter((w) => w.available === w.total)
   const partial = windows.filter((w) => w.available < w.total)
   const selected = windows.find((w) => windowKey(w) === selectedKey) ?? null
+  const myVote = request?.votes?.[me.id] ?? null
+  const slotAt = (t, r = request) => ({ start: toLocal(t), end: toLocal(addMinutes(t, r.duration)) })
+
+  // 노란 박스를 옮기면, 이미 투표했다면 내 투표도 그 시간으로 옮긴다
+  const moveTo = (t) => {
+    setStart(t)
+    if (myVote) setVote(request.id, slotAt(t))
+  }
 
   const pickWindow = (w, r = request) => {
     setSelectedKey(windowKey(w))
-    setStart(bestStartInWindow({ window: w, durationMin: r.duration, members, busy }).start)
+    moveTo(bestStartInWindow({ window: w, durationMin: r.duration, members, busy }).start)
   }
 
   // 일정을 고르면 가장 많이 참석할 수 있는 구간 중 점수가 제일 높은 시간을 바로 골라 두어,
@@ -65,6 +74,14 @@ export default function RecommendPanel({ team, members }) {
     setConfirmed(null)
     const r = requests.find((x) => x.id === id)
     const ws = windowsFor(r)
+    // 이미 투표했으면 노란 박스를 내가 투표한 시간에 둔다
+    const voted = r?.votes?.[me.id]
+    const home = voted && ws.find((w) => w.start <= parseISO(voted.start) && w.end >= parseISO(voted.end))
+    if (home) {
+      setSelectedKey(windowKey(home))
+      setStart(parseISO(voted.start))
+      return
+    }
     const topTier = ws.filter((w) => w.available === ws[0]?.available)
     let best = null
     for (const w of topTier) {
@@ -92,8 +109,7 @@ export default function RecommendPanel({ team, members }) {
     pickRequest(null)
   }
   const onConfirm = () => confirmAt(start)
-  const onAddCandidate = () =>
-    addCandidate(request.id, { start: format(start, "yyyy-MM-dd'T'HH:mm"), end: format(addMinutes(start, request.duration), "yyyy-MM-dd'T'HH:mm") })
+  const onVote = () => (myVote ? clearVote(request.id) : setVote(request.id, slotAt(start)))
 
   return (
     <>
@@ -175,26 +191,29 @@ export default function RecommendPanel({ team, members }) {
                 )}
 
                 {selected && start && (
-                  <TimelinePicker win={selected} duration={request.duration} start={start} onChange={setStart} title={request.title} />
+                  <TimelinePicker win={selected} duration={request.duration} start={start} onChange={moveTo} title={request.title} />
                 )}
 
                 <div className="flex items-center gap-2 border-t border-stone-100 pt-3">
-                  <Button className="ml-auto" disabled={!selected} onClick={onAddCandidate}>
-                    <Plus size={15} /> 투표 후보에 추가
+                  <Button
+                    className={`ml-auto ${myVote ? 'border-emerald-600 text-emerald-700' : ''}`}
+                    disabled={!selected && !myVote}
+                    onClick={onVote}
+                  >
+                    {myVote ? '투표 취소' : '투표'}
                   </Button>
                   <Button variant="primary" disabled={!selected} onClick={onConfirm}>
                     {selected && start ? `${hm(start)}–${hm(addMinutes(start, request.duration))}로 확정` : '빈 시간을 고르세요'}
                   </Button>
                 </div>
 
-                <CandidateVote
+                <VoteList
                   request={request}
                   members={members}
                   busy={busy}
                   me={me}
-                  onVote={(candidateId) => vote(request.id, candidateId)}
-                  onRemove={(candidateId) => removeCandidate(request.id, candidateId)}
-                  onConfirm={(c) => confirmAt(parseISO(c.start))}
+                  current={selected && start ? toLocal(start) : null}
+                  onConfirm={(slot) => confirmAt(parseISO(slot.start))}
                 />
               </div>
             )}
@@ -221,69 +240,63 @@ export default function RecommendPanel({ team, members }) {
   )
 }
 
-// 후보 시간마다 원하는 사람이 투표한다(여러 후보에 투표 가능). 표를 가장 많이 받은 후보를 표시한다. 선호 시간대 설정과는 따로 간다.
-function CandidateVote({ request, members, busy, me, onVote, onRemove, onConfirm }) {
-  const candidates = [...(request.candidates ?? [])].sort((a, b) => a.start.localeCompare(b.start))
-  const votesOf = (c) => request.votes?.[c.id] ?? {}
-  const voters = (c) => members.filter((m) => votesOf(c)[m.id])
-  const total = (c) => voters(c).length
-  const top = Math.max(0, ...candidates.map(total))
+// 사람마다 원하는 시간 하나에 투표한 결과를 시간별로 모아 보여준다. 선호 시간대 설정과는 따로 간다.
+function VoteList({ request, members, busy, me, current, onConfirm }) {
+  const slots = new Map()
+  for (const m of members) {
+    const v = request.votes?.[m.id]
+    if (!v) continue
+    if (!slots.has(v.start)) slots.set(v.start, { ...v, voters: [] })
+    slots.get(v.start).voters.push(m)
+  }
+  const rows = [...slots.values()].sort((a, b) => a.start.localeCompare(b.start))
+  const top = Math.max(0, ...rows.map((r) => r.voters.length))
 
   return (
     <div className="rounded-xl border border-stone-200">
       <div className="flex items-center gap-2 border-b border-stone-100 px-4 py-2.5">
         <span className="text-sm font-semibold">원하는 시간 투표</span>
-        <span className="text-xs text-stone-400">가능한 시간 중에서 언제가 좋은지 골라요</span>
+        <span className="text-xs text-stone-400">
+          {rows.reduce((n, r) => n + r.voters.length, 0)}/{members.length}명 투표 · 노란 박스를 옮기면 내 투표도 따라 옮겨져요
+        </span>
       </div>
-      {candidates.length === 0 && (
-        <p className="px-4 py-3 text-xs text-stone-400">위에서 시간을 고르고 '투표 후보에 추가'를 누르면 팀원들이 원하는 시간을 고를 수 있어요.</p>
-      )}
-      {candidates.map((c) => {
-        const s = parseISO(c.start).getTime()
-        const e = parseISO(c.end).getTime()
+      {rows.length === 0 && <p className="px-4 py-3 text-xs text-stone-400">노란 박스를 원하는 시간에 두고 '투표'를 누르세요.</p>}
+      {rows.map((row) => {
+        const s = parseISO(row.start).getTime()
+        const e = parseISO(row.end).getTime()
         const available = members.filter((m) => !(busy[m.id] ?? []).some((iv) => iv.start < e && iv.end > s)).length
-        const mine = Boolean(votesOf(c)[me.id])
-        const best = top > 0 && total(c) === top
+        const best = row.voters.length === top
+        const mine = row.voters.some((m) => m.id === me.id)
         return (
-          <div key={c.id} className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-t-0 ${best ? 'bg-emerald-50/60' : ''}`}>
+          <div
+            key={row.start}
+            className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-t-0 ${best ? 'bg-emerald-50/60' : ''} ${
+              row.start === current ? 'ring-1 ring-inset ring-amber-400' : ''
+            }`}
+          >
             <div className="w-28 shrink-0">
               <div className="text-sm font-semibold">
-                {hm(parseISO(c.start))}–{hm(parseISO(c.end))}
+                {hm(parseISO(row.start))}–{hm(parseISO(row.end))}
               </div>
               <div className={`text-[11px] ${available === members.length ? 'text-stone-500' : 'text-amber-700'}`}>
                 {available}/{members.length}명 가능
               </div>
             </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              {best && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">가장 많이 원함</span>}
-              <div className="flex items-center gap-1.5 text-[11px] text-stone-500">
-                {total(c)}표
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-[11px] text-stone-500">
+              {best && <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800">가장 많이 원함</span>}
+              {mine && <span className="rounded bg-stone-100 px-1.5 py-0.5 font-semibold text-stone-700">내 투표</span>}
+              <span className="flex items-center gap-1.5">
+                {row.voters.length}표
                 <span className="flex -space-x-1">
-                  {voters(c).map((m) => (
+                  {row.voters.map((m) => (
                     <Avatar key={m.id} profile={m} size="xs" ring />
                   ))}
                 </span>
-              </div>
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={() => onVote(c.id)}
-              className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                mine ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-stone-200 text-stone-600 hover:bg-stone-50'
-              }`}
-            >
-              {mine ? '투표함' : '투표'}
-            </button>
-            <Button className="shrink-0" onClick={() => onConfirm(c)}>
+            <Button className="shrink-0" onClick={() => onConfirm(row)}>
               확정
             </Button>
-            {c.created_by === me.id ? (
-              <button type="button" onClick={() => onRemove(c.id)} className="shrink-0 rounded p-1 text-stone-400 hover:bg-stone-100" aria-label="후보 삭제">
-                <X size={14} />
-              </button>
-            ) : (
-              <span className="w-[22px] shrink-0" />
-            )}
           </div>
         )
       })}

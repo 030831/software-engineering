@@ -102,18 +102,10 @@ export function makeDemoData(today = new Date()) {
     req('r6', 't1', '자료 조사 회의', 11, 60), // 다음 주 금: 김명진이 하루 종일 여행이라 모두 되는 시간이 없음
   ]
 
-  // 후보 시간 투표 예시: 중간 피드백 2 준비 회의에 후보 3개와 팀원 3명의 투표 (나는 아직 안 함, 여러 후보에 투표 가능)
+  // 원하는 시간 투표 예시: 중간 피드백 2 준비 회의에 팀원 3명이 원하는 시간 (나는 아직 안 함)
   const r1 = requests[0]
-  r1.candidates = [
-    { id: 'c1', start: `${r1.date}T13:00`, end: `${r1.date}T15:00`, created_by: 'u2' },
-    { id: 'c2', start: `${r1.date}T14:00`, end: `${r1.date}T16:00`, created_by: 'u2' },
-    { id: 'c3', start: `${r1.date}T20:00`, end: `${r1.date}T22:00`, created_by: 'u4' },
-  ]
-  r1.votes = {
-    c1: { u2: 1, u4: 1 },
-    c2: { u3: 1 },
-    c3: { u4: 1 },
-  }
+  const slot = (start, end) => ({ start: `${r1.date}T${start}`, end: `${r1.date}T${end}` })
+  r1.votes = { u2: slot('13:00', '15:00'), u4: slot('13:00', '15:00'), u3: slot('14:00', '16:00') }
 
   return { profiles: PROFILES, teams: TEAMS, events, requests }
 }
