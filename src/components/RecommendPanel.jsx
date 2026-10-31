@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
 import { addDays, addMinutes, format, isSameDay, parseISO, startOfDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { CalendarCheck, Plus, Sparkles } from 'lucide-react'
+import { CalendarCheck, Plus, Sparkles, X } from 'lucide-react'
 import { useStore } from '../store/AppStore'
 import { busyIntervalsFor } from '../lib/events'
 import { bestStartInWindow, freeWindows, startCandidates } from '../lib/recommend'
-import { Button, inputClass } from './ui'
+import { Avatar, Button, inputClass } from './ui'
 import MySchedule from './MySchedule'
 
 const DURATIONS = [
@@ -26,8 +26,9 @@ const hm = (d) => format(d, 'HH:mm')
 const windowKey = (w) => `${w.start.toISOString()}-${w.end.toISOString()}-${w.available}`
 
 // 흐름: 정할 일정(날짜·길이 정해짐) 고르기 → 그날 빈 구간 고르기 → 막대에서 시작 시간 정하기 → 확정(한 번만)
+// 또는 고른 시간을 후보로 올려 팀원들이 원하는 시간을 투표하고, 후보 중 하나로 확정 (임시)
 export default function RecommendPanel({ team, members }) {
-  const { state, addRequest, scheduleRequest } = useStore()
+  const { state, me, addRequest, scheduleRequest, addCandidate, removeCandidate, vote } = useStore()
   // 날짜가 지난 요청은 고를 시간이 없으니 목록에서 숨긴다
   const today = format(new Date(), 'yyyy-MM-dd')
   const openRequests = state.requests.filter((r) => r.team_id === team.id && r.status === 'open')
@@ -76,7 +77,7 @@ export default function RecommendPanel({ team, members }) {
     }
   }
 
-  const onConfirm = () => {
+  const confirmAt = (start) => {
     const end = addMinutes(start, request.duration)
     scheduleRequest(request.id, {
       title: request.title,
@@ -90,6 +91,9 @@ export default function RecommendPanel({ team, members }) {
     setConfirmed({ title: request.title, label: `${dayLabel(request.date)} ${hm(start)}–${hm(end)}`, date: request.date })
     pickRequest(null)
   }
+  const onConfirm = () => confirmAt(start)
+  const onAddCandidate = () =>
+    addCandidate(request.id, { start: format(start, "yyyy-MM-dd'T'HH:mm"), end: format(addMinutes(start, request.duration), "yyyy-MM-dd'T'HH:mm") })
 
   return (
     <>
@@ -174,11 +178,24 @@ export default function RecommendPanel({ team, members }) {
                   <TimelinePicker win={selected} duration={request.duration} start={start} onChange={setStart} title={request.title} />
                 )}
 
-                <div className="flex items-center gap-3 border-t border-stone-100 pt-3">
-                  <Button variant="primary" className="ml-auto" disabled={!selected} onClick={onConfirm}>
+                <div className="flex items-center gap-2 border-t border-stone-100 pt-3">
+                  <Button className="ml-auto" disabled={!selected} onClick={onAddCandidate}>
+                    <Plus size={15} /> 투표 후보에 추가
+                  </Button>
+                  <Button variant="primary" disabled={!selected} onClick={onConfirm}>
                     {selected && start ? `${hm(start)}–${hm(addMinutes(start, request.duration))}로 확정` : '빈 시간을 고르세요'}
                   </Button>
                 </div>
+
+                <CandidateVote
+                  request={request}
+                  members={members}
+                  busy={busy}
+                  me={me}
+                  onVote={(candidateId, value) => vote(request.id, candidateId, value)}
+                  onRemove={(candidateId) => removeCandidate(request.id, candidateId)}
+                  onConfirm={(c) => confirmAt(parseISO(c.start))}
+                />
               </div>
             )}
           </div>
@@ -201,6 +218,91 @@ export default function RecommendPanel({ team, members }) {
         }
       />
     </>
+  )
+}
+
+const VOTES = [
+  { value: 2, label: '좋음', on: 'border-emerald-600 bg-emerald-600 text-white' },
+  { value: 1, label: '괜찮음', on: 'border-amber-500 bg-amber-500 text-white' },
+  { value: 0, label: '싫음', on: 'border-stone-500 bg-stone-500 text-white' },
+]
+
+// 후보 시간마다 팀원이 원하는 정도를 표시한다. 점수 = 좋음 2 + 괜찮음 1 (싫음 0). 선호 시간대 설정과는 따로 간다.
+function CandidateVote({ request, members, busy, me, onVote, onRemove, onConfirm }) {
+  const candidates = [...(request.candidates ?? [])].sort((a, b) => a.start.localeCompare(b.start))
+  const votesOf = (c) => request.votes?.[c.id] ?? {}
+  const total = (c) => Object.values(votesOf(c)).reduce((sum, v) => sum + v, 0)
+  const top = Math.max(0, ...candidates.map(total))
+
+  return (
+    <div className="rounded-xl border border-stone-200">
+      <div className="flex items-center gap-2 border-b border-stone-100 px-4 py-2.5">
+        <span className="text-sm font-semibold">원하는 시간 투표</span>
+        <span className="text-xs text-stone-400">가능한 시간 중에서 언제가 좋은지 골라요</span>
+      </div>
+      {candidates.length === 0 && (
+        <p className="px-4 py-3 text-xs text-stone-400">위에서 시간을 고르고 '투표 후보에 추가'를 누르면 팀원들이 원하는 시간을 고를 수 있어요.</p>
+      )}
+      {candidates.map((c) => {
+        const s = parseISO(c.start).getTime()
+        const e = parseISO(c.end).getTime()
+        const available = members.filter((m) => !(busy[m.id] ?? []).some((iv) => iv.start < e && iv.end > s)).length
+        const votes = votesOf(c)
+        const best = top > 0 && total(c) === top
+        return (
+          <div key={c.id} className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-t-0 ${best ? 'bg-emerald-50/60' : ''}`}>
+            <div className="w-28 shrink-0">
+              <div className="text-sm font-semibold">
+                {hm(parseISO(c.start))}–{hm(parseISO(c.end))}
+              </div>
+              <div className={`text-[11px] ${available === members.length ? 'text-stone-500' : 'text-amber-700'}`}>
+                {available}/{members.length}명 가능
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              {best && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">가장 많이 원함</span>}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-500">
+                {VOTES.map((v) => {
+                  const who = members.filter((m) => votes[m.id] === v.value)
+                  return (
+                    <span key={v.value} className="flex items-center gap-1">
+                      {v.label} {who.length}
+                      <span className="flex -space-x-1">
+                        {who.map((m) => (
+                          <Avatar key={m.id} profile={m} size="xs" ring />
+                        ))}
+                      </span>
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              {VOTES.map((v) => (
+                <button
+                  key={v.value}
+                  type="button"
+                  onClick={() => onVote(c.id, v.value)}
+                  className={`rounded-md border px-2 py-1 text-xs transition ${votes[me.id] === v.value ? v.on : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <Button className="shrink-0" onClick={() => onConfirm(c)}>
+              확정
+            </Button>
+            {c.created_by === me.id ? (
+              <button type="button" onClick={() => onRemove(c.id)} className="shrink-0 rounded p-1 text-stone-400 hover:bg-stone-100" aria-label="후보 삭제">
+                <X size={14} />
+              </button>
+            ) : (
+              <span className="w-[22px] shrink-0" />
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

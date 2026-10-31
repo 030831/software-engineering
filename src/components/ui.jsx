@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, width = 'max-w-lg', children }) {
 }
 
 export function Avatar({ profile, size = 'md', ring = false }) {
-  const sz = size === 'sm' ? 'size-7 text-[11px]' : 'size-8 text-xs'
+  const sz = size === 'xs' ? 'size-5 text-[9px]' : size === 'sm' ? 'size-7 text-[11px]' : 'size-8 text-xs'
   return (
     <div
       title={profile.name}
