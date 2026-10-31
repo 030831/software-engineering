@@ -75,6 +75,9 @@ export function makeDemoData(today = new Date()) {
     teamEv('te8', 't2', 6, '14:00', '16:00', '정기 합주'),
   )
 
+  // 개인 하루 종일 일정 예시: 추천 계산에서 그날 전체를 막는다
+  events.push({ ...ev('u4', 11, '00:00', '00:00', '가족 여행', 'public', { all_day: true }), id: 'ad1', end: at(12, '00:00') })
+
   // 이미 지난 개인 일정은 일부를 완료 처리해 달성률이 보이게 한다
   events.forEach((e, i) => {
     if (e.kind === 'personal' && parseISO(e.end) < today && i % 3 !== 0) e.done = true
@@ -96,6 +99,7 @@ export function makeDemoData(today = new Date()) {
     req('r3', 't1', 'UI 시안 리뷰', 8, 60), // 다음 주 화: 바쁜 날이라 일부만 되는 시간이 많음
     req('r4', 't1', '코드 리뷰', 9, 90), // 다음 주 수: 팀원의 완전 비공개 일정이 있는 날
     req('r5', 't2', '합주 연습', 12, 120), // 밴드 동아리 (다른 팀)
+    req('r6', 't1', '자료 조사 회의', 11, 60), // 다음 주 금: 김명진이 하루 종일 여행이라 모두 되는 시간이 없음
   ]
 
   return { profiles: PROFILES, teams: TEAMS, events, requests }

@@ -7,8 +7,8 @@ import { DEFAULT_PREFS } from '../lib/recommend'
 // Supabase를 붙일 때 아래 actions 안쪽만 API 호출로 바꾸면 화면 코드는 그대로 쓸 수 있다.
 const KEY = 'jaksim365-demo-v4'
 // 데모 데이터를 새로 추가하면 올린다. 저장된 데이터는 지우지 않고 빠진 것만 채운다.
-//   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대
-const SEED = 4
+//   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대, 5: 하루 종일 일정 예시
+const SEED = 5
 
 function load() {
   try {
@@ -33,6 +33,10 @@ function withNewDemoData(saved) {
   if (seed < 3) next.events = addMissing(saved.events, demo.events.filter((e) => e.id.startsWith('te')))
   if (seed < 4) {
     next.profiles = saved.profiles.map((p) => (p.prefs ? p : { ...p, prefs: PROFILES.find((d) => d.id === p.id)?.prefs ?? DEFAULT_PREFS }))
+  }
+  if (seed < 5) {
+    next.events = addMissing(next.events, demo.events.filter((e) => e.id === 'ad1'))
+    next.requests = addMissing(next.requests ?? [], demo.requests.filter((r) => r.id === 'r6'))
   }
   return next
 }
