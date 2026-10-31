@@ -192,7 +192,7 @@ export default function RecommendPanel({ team, members }) {
                   members={members}
                   busy={busy}
                   me={me}
-                  onVote={(candidateId, value) => vote(request.id, candidateId, value)}
+                  onVote={(candidateId) => vote(request.id, candidateId)}
                   onRemove={(candidateId) => removeCandidate(request.id, candidateId)}
                   onConfirm={(c) => confirmAt(parseISO(c.start))}
                 />
@@ -221,17 +221,12 @@ export default function RecommendPanel({ team, members }) {
   )
 }
 
-const VOTES = [
-  { value: 2, label: '좋음', on: 'border-emerald-600 bg-emerald-600 text-white' },
-  { value: 1, label: '괜찮음', on: 'border-amber-500 bg-amber-500 text-white' },
-  { value: 0, label: '싫음', on: 'border-stone-500 bg-stone-500 text-white' },
-]
-
-// 후보 시간마다 팀원이 원하는 정도를 표시한다. 점수 = 좋음 2 + 괜찮음 1 (싫음 0). 선호 시간대 설정과는 따로 간다.
+// 후보 시간마다 원하는 사람이 투표한다(여러 후보에 투표 가능). 표를 가장 많이 받은 후보를 표시한다. 선호 시간대 설정과는 따로 간다.
 function CandidateVote({ request, members, busy, me, onVote, onRemove, onConfirm }) {
   const candidates = [...(request.candidates ?? [])].sort((a, b) => a.start.localeCompare(b.start))
   const votesOf = (c) => request.votes?.[c.id] ?? {}
-  const total = (c) => Object.values(votesOf(c)).reduce((sum, v) => sum + v, 0)
+  const voters = (c) => members.filter((m) => votesOf(c)[m.id])
+  const total = (c) => voters(c).length
   const top = Math.max(0, ...candidates.map(total))
 
   return (
@@ -247,7 +242,7 @@ function CandidateVote({ request, members, busy, me, onVote, onRemove, onConfirm
         const s = parseISO(c.start).getTime()
         const e = parseISO(c.end).getTime()
         const available = members.filter((m) => !(busy[m.id] ?? []).some((iv) => iv.start < e && iv.end > s)).length
-        const votes = votesOf(c)
+        const mine = Boolean(votesOf(c)[me.id])
         const best = top > 0 && total(c) === top
         return (
           <div key={c.id} className={`flex items-center gap-3 border-t border-stone-100 px-4 py-2.5 first:border-t-0 ${best ? 'bg-emerald-50/60' : ''}`}>
@@ -261,34 +256,24 @@ function CandidateVote({ request, members, busy, me, onVote, onRemove, onConfirm
             </div>
             <div className="min-w-0 flex-1 space-y-1">
               {best && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">가장 많이 원함</span>}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-500">
-                {VOTES.map((v) => {
-                  const who = members.filter((m) => votes[m.id] === v.value)
-                  return (
-                    <span key={v.value} className="flex items-center gap-1">
-                      {v.label} {who.length}
-                      <span className="flex -space-x-1">
-                        {who.map((m) => (
-                          <Avatar key={m.id} profile={m} size="xs" ring />
-                        ))}
-                      </span>
-                    </span>
-                  )
-                })}
+              <div className="flex items-center gap-1.5 text-[11px] text-stone-500">
+                {total(c)}표
+                <span className="flex -space-x-1">
+                  {voters(c).map((m) => (
+                    <Avatar key={m.id} profile={m} size="xs" ring />
+                  ))}
+                </span>
               </div>
             </div>
-            <div className="flex shrink-0 gap-1">
-              {VOTES.map((v) => (
-                <button
-                  key={v.value}
-                  type="button"
-                  onClick={() => onVote(c.id, v.value)}
-                  className={`rounded-md border px-2 py-1 text-xs transition ${votes[me.id] === v.value ? v.on : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => onVote(c.id)}
+              className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                mine ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+              }`}
+            >
+              {mine ? '투표함' : '투표'}
+            </button>
             <Button className="shrink-0" onClick={() => onConfirm(c)}>
               확정
             </Button>

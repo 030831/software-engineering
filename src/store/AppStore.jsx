@@ -7,8 +7,8 @@ import { DEFAULT_PREFS } from '../lib/recommend'
 // Supabase를 붙일 때 아래 actions 안쪽만 API 호출로 바꾸면 화면 코드는 그대로 쓸 수 있다.
 const KEY = 'jaksim365-demo-v4'
 // 데모 데이터를 새로 추가하면 올린다. 저장된 데이터는 지우지 않고 빠진 것만 채운다.
-//   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대, 5: 하루 종일 일정 예시, 6: 후보 투표 예시
-const SEED = 6
+//   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대, 5: 하루 종일 일정 예시, 6: 후보 투표 예시, 7: 투표를 버튼 하나로
+const SEED = 7
 
 function load() {
   try {
@@ -41,6 +41,12 @@ function withNewDemoData(saved) {
   if (seed < 6) {
     const r1 = demo.requests.find((r) => r.id === 'r1')
     next.requests = next.requests.map((r) => (r.id === 'r1' && !r.candidates ? { ...r, candidates: r1.candidates, votes: r1.votes } : r))
+  }
+  if (seed < 7) {
+    // 좋음(2)·괜찮음(1)·싫음(0) 투표에서 '좋음'만 투표로 남긴다
+    const toSingle = (votes) =>
+      Object.fromEntries(Object.entries(votes).map(([cid, byUser]) => [cid, Object.fromEntries(Object.keys(byUser).filter((u) => byUser[u] === 2).map((u) => [u, 1]))]))
+    next.requests = next.requests.map((r) => (r.votes ? { ...r, votes: toSingle(r.votes) } : r))
   }
   return next
 }
@@ -114,7 +120,7 @@ export function AppStoreProvider({ children }) {
           ...s,
           requests: [...s.requests, { id: newId(), team_id: teamId, ...request, created_by: s.currentUserId, status: 'open' }],
         })),
-      // 후보 시간 투표 (임시). candidates: [{ id, start, end, created_by }], votes: { [후보 id]: { [사람 id]: 2 좋음 | 1 괜찮음 | 0 싫음 } }
+      // 후보 시간 투표 (임시). candidates: [{ id, start, end, created_by }], votes: { [후보 id]: { [사람 id]: 1 } }
       addCandidate: (requestId, { start, end }) =>
         setState((s) => ({
           ...s,
@@ -131,15 +137,15 @@ export function AppStoreProvider({ children }) {
             r.id === requestId ? { ...r, candidates: (r.candidates ?? []).filter((c) => c.id !== candidateId) } : r,
           ),
         })),
-      // 같은 값을 다시 누르면 투표를 취소한다
-      vote: (requestId, candidateId, value) =>
+      // 누르면 투표, 다시 누르면 취소. 여러 후보에 투표할 수 있다
+      vote: (requestId, candidateId) =>
         setState((s) => ({
           ...s,
           requests: s.requests.map((r) => {
             if (r.id !== requestId) return r
             const mine = { ...(r.votes?.[candidateId] ?? {}) }
-            if (mine[s.currentUserId] === value) delete mine[s.currentUserId]
-            else mine[s.currentUserId] = value
+            if (mine[s.currentUserId]) delete mine[s.currentUserId]
+            else mine[s.currentUserId] = 1
             return { ...r, votes: { ...(r.votes ?? {}), [candidateId]: mine } }
           }),
         })),
