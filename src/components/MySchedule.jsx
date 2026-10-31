@@ -8,16 +8,17 @@ import { viewOf } from '../lib/visibility'
 import { Avatar, Button } from './ui'
 
 const hm = (s) => format(typeof s === 'string' ? parseISO(s) : s, 'HH:mm')
+const timeLabel = (ev) => (ev.all_day ? '하루 종일' : `${hm(ev.start)}–${hm(ev.end)}`)
 
 // 팀 화면 아래의 주간 표. 이 팀의 일정, 내 일정, 그리고 팀원 일정을 공개 범위에 맞춰 보여준다.
-// focusDate: 정하는 중인 일정의 날짜(그 주로 이동), preview: 추가될 일정 { title, date, duration, start?, end? }
-export default function MySchedule({ team, members, focusDate, preview }) {
+// focusDate: 정하는 중인 일정의 날짜(그 주로 이동, focusTick이 바뀌면 같은 날짜라도 다시 이동), preview: 추가될 일정 { title, date, duration, start?, end? }
+export default function MySchedule({ team, members, focusDate, focusTick, preview }) {
   const { state, me } = useStore()
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
 
   useEffect(() => {
     if (focusDate) setWeekStart(startOfWeek(parseISO(focusDate), { weekStartsOn: 1 }))
-  }, [focusDate])
+  }, [focusDate, focusTick])
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const mine = calendarEventsFor(state, me.id)
@@ -95,7 +96,8 @@ export default function MySchedule({ team, members, focusDate, preview }) {
           {days.map((d) => (
             <Cell key={d.toISOString()} focus={focusDate && isSameDay(d, parseISO(focusDate))}>
               {eventsOnDay(myEvents, d)
-                .filter((ev) => !ev.all_day)
+                // 다른 팀의 하루 종일 일정은 기간 표시라 빼고, 내 하루 종일 일정은 보여준다 (추천에서도 그날 전체를 막는다)
+                .filter((ev) => !(ev.all_day && ev.kind === 'team'))
                 .map((ev) => {
                   const clash = clashes(ev)
                   return (
@@ -104,9 +106,7 @@ export default function MySchedule({ team, members, focusDate, preview }) {
                         <span className="truncate">{ev.title}</span>
                         {ev.visibility === 'private' && <Lock size={10} className="shrink-0 opacity-60" />}
                       </div>
-                      <div className="text-[10px] opacity-70">
-                        {hm(ev.start)}–{hm(ev.end)}
-                      </div>
+                      <div className="text-[10px] opacity-70">{timeLabel(ev)}</div>
                     </div>
                   )
                 })}
@@ -115,7 +115,7 @@ export default function MySchedule({ team, members, focusDate, preview }) {
         </Row>
 
         {others.map((m) => {
-          const events = state.events.filter((e) => e.kind === 'personal' && e.owner_id === m.id && !e.all_day && viewOf(e, team.id) !== 'hidden')
+          const events = state.events.filter((e) => e.kind === 'personal' && e.owner_id === m.id && viewOf(e, team.id) !== 'hidden')
           return (
             <Row
               key={m.id}
@@ -132,16 +132,12 @@ export default function MySchedule({ team, members, focusDate, preview }) {
                     return viewOf(ev, team.id) === 'full' ? (
                       <div key={ev.id} className={`rounded bg-stone-100 px-1.5 py-1 text-stone-800 ${ring}`}>
                         <div className="truncate">{ev.title}</div>
-                        <div className="text-[10px] opacity-70">
-                          {hm(ev.start)}–{hm(ev.end)}
-                        </div>
+                        <div className="text-[10px] opacity-70">{timeLabel(ev)}</div>
                       </div>
                     ) : (
                       <div key={ev.id} className={`busy-stripe rounded border border-stone-200 px-1.5 py-1 text-stone-500 ${ring}`}>
                         <div>바쁨</div>
-                        <div className="text-[10px] text-stone-400">
-                          {hm(ev.start)}–{hm(ev.end)}
-                        </div>
+                        <div className="text-[10px] text-stone-400">{timeLabel(ev)}</div>
                       </div>
                     )
                   })}

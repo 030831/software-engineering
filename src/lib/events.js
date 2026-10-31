@@ -48,8 +48,9 @@ export function calendarEventsFor(state, userId) {
 }
 
 // 추천 계산용 바쁜 구간. 공개 범위와 관계없이(완전 비공개 포함) 모두 반영한다.
+// 개인의 하루 종일 일정은 그날 전체를 막는다. 팀의 하루 종일 일정('스프린트 2' 같은 기간 표시)은 막지 않는다.
 export function busyIntervalsFor(state, userId) {
   return calendarEventsFor(state, userId)
-    .filter((e) => !e.all_day)
+    .filter((e) => !(e.all_day && e.kind === 'team'))
     .map((e) => ({ start: parseISO(e.start).getTime(), end: parseISO(e.end).getTime() }))
 }

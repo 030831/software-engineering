@@ -38,6 +38,8 @@ export default function RecommendPanel({ team, members }) {
   const [selectedKey, setSelectedKey] = useState(null)
   const [start, setStart] = useState(null)
   const [confirmed, setConfirmed] = useState(null)
+  // 같은 일정을 다시 눌러도 아래 표가 그 주로 돌아가도록 누를 때마다 올린다
+  const [focusTick, setFocusTick] = useState(0)
 
   const request = requests.find((r) => r.id === requestId) ?? null
   const busy = Object.fromEntries(members.map((m) => [m.id, busyIntervalsFor(state, m.id)]))
@@ -56,6 +58,7 @@ export default function RecommendPanel({ team, members }) {
   // 아래 표에 추가될 위치가 곧장 보이게 한다
   const pickRequest = (id) => {
     setRequestId(id)
+    setFocusTick((n) => n + 1)
     setSelectedKey(null)
     setStart(null)
     setConfirmed(null)
@@ -185,6 +188,7 @@ export default function RecommendPanel({ team, members }) {
       <MySchedule
         team={team}
         members={members}
+        focusTick={focusTick}
         focusDate={request?.date ?? confirmed?.date}
         preview={
           request && {
