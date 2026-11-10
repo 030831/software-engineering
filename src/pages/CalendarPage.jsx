@@ -18,21 +18,27 @@ export default function CalendarPage() {
   const events = calendarEventsFor(state, me.id)
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-stone-200 bg-white px-5 py-3">
-        <h1 className="mr-2 text-lg font-semibold">{format(month, 'yyyy년 M월')}</h1>
-        <Button variant="ghost" className="px-1.5" onClick={() => setMonth((m) => addMonths(m, -1))} aria-label="이전 달">
-          <ChevronLeft size={18} />
-        </Button>
-        <Button variant="ghost" className="px-1.5" onClick={() => setMonth((m) => addMonths(m, 1))} aria-label="다음 달">
-          <ChevronRight size={18} />
-        </Button>
-        <Button onClick={() => setMonth(new Date())}>오늘</Button>
+    <div className="flex h-full flex-col p-6 pl-2">
+      <div className="mb-4 flex items-center gap-2 px-1">
+        <h1 className="mr-3 text-[22px] font-bold tracking-tight tabular-nums">
+          {format(month, 'yyyy년')} <span className="text-stone-400">{format(month, 'M월')}</span>
+        </h1>
+        <div className="flex items-center rounded-xl bg-white shadow-card">
+          <Button variant="ghost" className="rounded-r-none px-2" onClick={() => setMonth((m) => addMonths(m, -1))} aria-label="이전 달">
+            <ChevronLeft size={17} />
+          </Button>
+          <Button variant="ghost" className="rounded-none px-3 text-[13px]" onClick={() => setMonth(new Date())}>
+            오늘
+          </Button>
+          <Button variant="ghost" className="rounded-l-none px-2" onClick={() => setMonth((m) => addMonths(m, 1))} aria-label="다음 달">
+            <ChevronRight size={17} />
+          </Button>
+        </div>
         <Button variant="primary" className="ml-auto" onClick={() => setEditing({ date: new Date() })}>
           <Plus size={16} /> 일정
         </Button>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="card min-h-0 flex-1 overflow-hidden">
         <MonthGrid month={month} events={events} teams={state.teams} onDayClick={setDay} onEventClick={(event) => setEditing({ event })} />
       </div>
 

@@ -12,7 +12,7 @@ import {
   startOfWeek,
 } from 'date-fns'
 import { Lock } from 'lucide-react'
-import { eventColor, eventsOnDay } from '../lib/events'
+import { eventColor, eventsOnDay, shadeText } from '../lib/events'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 const MAX_CHIPS = 3
@@ -22,9 +22,9 @@ export default function MonthGrid({ month, events, teams, onDayClick, onEventCli
 
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-7 border-b border-stone-200 text-xs text-stone-400">
+      <div className="grid grid-cols-7 border-b border-stone-100 text-[11px] font-semibold text-stone-400">
         {DOW.map((d, i) => (
-          <div key={d} className={`px-2 py-2 ${i === 0 ? 'text-red-500' : ''}`}>
+          <div key={d} className={`px-3 py-2.5 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-sky-500' : ''}`}>
             {d}
           </div>
         ))}
@@ -37,11 +37,11 @@ export default function MonthGrid({ month, events, teams, onDayClick, onEventCli
             <div
               key={day.toISOString()}
               onClick={() => onDayClick(day)}
-              className={`cursor-pointer overflow-hidden border-b border-r border-stone-200 p-1.5 hover:bg-stone-50 ${inMonth ? 'bg-white' : 'bg-stone-50/60'}`}
+              className={`group cursor-pointer overflow-hidden border-b border-r border-stone-100 p-1.5 transition-colors hover:bg-stone-50/80 [&:nth-child(7n)]:border-r-0 ${inMonth ? 'bg-white' : 'bg-stone-50/50'}`}
             >
               <span
-                className={`mb-0.5 inline-flex size-6 items-center justify-center rounded-full text-xs ${
-                  isToday(day) ? 'bg-stone-900 font-semibold text-white' : !inMonth ? 'text-stone-300' : day.getDay() === 0 ? 'text-red-500' : ''
+                className={`mb-1 inline-flex size-6 items-center justify-center rounded-full text-xs font-medium tabular-nums ${
+                  isToday(day) ? 'bg-brand font-semibold text-white' : !inMonth ? 'text-stone-300' : day.getDay() === 0 ? 'text-rose-400' : 'text-stone-700'
                 }`}
               >
                 {format(day, 'd')}
@@ -75,8 +75,8 @@ function Chip({ ev, day, color, onClick }) {
     return (
       <div
         onClick={handle}
-        className={`h-5 truncate px-1.5 text-[11px] leading-5 text-white ${first ? 'rounded-l' : '-ml-1.5'} ${last ? 'rounded-r' : '-mr-1.5'}`}
-        style={{ background: color }}
+        className={`h-5 truncate px-1.5 text-[11px] font-medium leading-5 ${first ? 'rounded-l-md' : '-ml-1.5'} ${last ? 'rounded-r-md' : '-mr-1.5'}`}
+        style={{ background: `${color}2e`, color: shadeText(color) }}
       >
         {first ? ev.title : ' '}
       </div>
@@ -86,13 +86,13 @@ function Chip({ ev, day, color, onClick }) {
   return (
     <div
       onClick={handle}
-      className={`flex h-5 items-center gap-1 rounded px-1.5 text-[11px] ${ev.done ? 'text-stone-400 line-through' : ''}`}
-      style={{ background: `${color}1f` }}
+      className={`flex h-5 items-center gap-1 rounded-md px-1.5 text-[11px] transition hover:brightness-95 ${ev.done ? 'text-stone-400 line-through' : 'text-stone-800'}`}
+      style={{ background: `${color}17` }}
     >
-      <span className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
-      <span className="shrink-0 text-stone-500">{format(start, 'HH:mm')}</span>
+      <span className="h-2.5 w-[3px] shrink-0 rounded-full" style={{ background: color }} />
+      <span className="shrink-0 tabular-nums text-stone-400">{format(start, 'HH:mm')}</span>
       <span className="truncate">{ev.title}</span>
-      {ev.visibility === 'private' && <Lock size={10} className="shrink-0 text-stone-400" />}
+      {ev.visibility === 'busy' && <Lock size={10} className="shrink-0 text-stone-400" />}
     </div>
   )
 }

@@ -86,15 +86,15 @@ export function scoreSlot({ slotStart, slotEnd, members, busy }) {
 export const DAY_START_MIN = 9 * 60
 export const DAY_END_MIN = 22 * 60
 
-// 일부만 참석하는 구간은 팀이 이 인원 이상일 때만 보여준다.
-// 2명 팀에서 '1/2명' 구간을 보여주면 상대의 (완전 비공개일 수도 있는) 일정 시간이 그대로 드러나기 때문.
-export const MIN_TEAM_FOR_PARTIAL = 3
+// 일부만 참석하는 구간(차선책)은 이 인원 이상이 될 때만 보여준다. 혼자 되는 시간은 회의가 아니다.
+// (팀원마다 가능한 시간은 주간 표에 이미 보이므로, 예전처럼 팀 크기로 막지 않는다.)
+export const MIN_ATTENDEES = 2
 
 /**
  * 정해진 날(day)의 빈 구간을 계산한다.
  * 10분 단위로 참석 가능한 사람을 구한 뒤, 그날 나타난 인원 조합마다 '그 사람들이 모두 되는' 시간을
  * 끊김 없이 묶는다. durationMin보다 짧은 구간, 그리고 인원도 같거나 적으면서 다른 구간 안에 들어가는 구간은 뺀다.
- * 전원 참석 가능한 구간이 먼저, 같은 인원이면 이른 시간 순.
+ * 전원 참석 가능한 구간이 먼저, 같은 인원이면 이른 시간 순. 각 구간에는 참석 가능한 사람 ids가 붙는다.
  */
 export function freeWindows({ members, busy, day, durationMin, now = new Date(), unitMin = 10 }) {
   const units = []
@@ -109,9 +109,7 @@ export function freeWindows({ members, busy, day, durationMin, now = new Date(),
 
   const keyOf = (ids) => [...ids].sort().join(',')
   const groups = new Map([[keyOf(members.map((m) => m.id)), members.map((m) => m.id)]])
-  if (members.length >= MIN_TEAM_FOR_PARTIAL) {
-    for (const u of units) if (u.free.size > 0) groups.set(keyOf(u.free), [...u.free])
-  }
+  for (const u of units) if (u.free.size >= MIN_ATTENDEES) groups.set(keyOf(u.free), [...u.free])
 
   const windows = []
   for (const ids of groups.values()) {
@@ -119,7 +117,7 @@ export function freeWindows({ members, busy, day, durationMin, now = new Date(),
     for (const u of units) {
       if (ids.every((id) => u.free.has(id))) {
         if (current) current.end = u.e
-        else windows.push((current = { start: u.s, end: u.e, available: ids.length, total: members.length }))
+        else windows.push((current = { start: u.s, end: u.e, ids, available: ids.length, total: members.length }))
       } else {
         current = null
       }
@@ -165,12 +163,38 @@ export function startCandidates(window, durationMin) {
   return list
 }
 
-// 구간 안에서 점수가 가장 높은 시작 시간 → { start, score }
+// 구간 안에서 점수가 가장 높은 시작 시간 → { start, score, ...scoreSlot 근거 }
 export function bestStartInWindow({ window, durationMin, members, busy }) {
   let best = null
   for (const s of startCandidates(window, durationMin)) {
     const r = scoreSlot({ slotStart: s, slotEnd: addMinutes(s, durationMin), members, busy })
-    if (!best || r.score > best.score) best = { start: s, score: r.score }
+    if (!best || r.score > best.score) best = { start: s, ...r }
   }
   return best ?? { start: window.start, score: -Infinity }
+}
+
+/**
+ * 한 주(weekStart: 월요일) 동안의 후보 구간을 추천 순서대로 돌려준다.
+ * 1) 참석 인원이 많은 순 (전원 참석이 먼저)  2) 구간 안 가장 좋은 시작 시간의 점수 순
+ *    (점수에 앞뒤 여유 C, 늦은 시간 L, 선호 시간대 P가 들어 있다)
+ * 3) 점수가 같으면 여유 시간이 많은 순: 비어 있는 구간이 긴 것 → 앞뒤 일정까지 간격이 넓은 것  4) 이른 시간 순
+ * 각 구간에는 best(추천 시작 시간과 근거)가 붙는다. 지난 시간은 빼고 계산한다.
+ */
+export function weekOptions({ members, busy, weekStart, durationMin, now = new Date() }) {
+  const options = []
+  for (let i = 0; i < 7; i++) {
+    const day = addDays(weekStart, i)
+    for (const w of freeWindows({ members, busy, day, durationMin, now })) {
+      options.push({ ...w, best: bestStartInWindow({ window: w, durationMin, members, busy }) })
+    }
+  }
+  const round = (x) => Math.round(x * 10) / 10
+  return options.sort(
+    (a, b) =>
+      b.available - a.available ||
+      round(b.best.score) - round(a.best.score) ||
+      b.end - b.start - (a.end - a.start) ||
+      b.best.minGap - a.best.minGap ||
+      a.start - b.start,
+  )
 }

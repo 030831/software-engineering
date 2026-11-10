@@ -81,14 +81,14 @@ export default function EventModal({ event, defaultDate, onClose }) {
 
   return (
     <Modal open onClose={onClose} title={title} width="max-w-xl">
-      <form onSubmit={onSave} className="space-y-4 p-5">
+      <form onSubmit={onSave} className="space-y-4 px-6 pb-6 pt-3">
         <input
           autoFocus={!readOnly}
           disabled={readOnly}
           value={form.title}
           onChange={(e) => set('title', e.target.value)}
           placeholder="병원 진료"
-          className={`${inputClass} h-10 text-base`}
+          className={`${inputClass} h-12 text-lg font-semibold`}
         />
 
         <div className="flex items-center gap-2">
@@ -106,7 +106,7 @@ export default function EventModal({ event, defaultDate, onClose }) {
             </>
           )}
         </div>
-        <label className="flex items-center gap-2 text-sm text-stone-600">
+        <label className="flex items-center gap-2 px-1 text-sm text-stone-600">
           <input type="checkbox" disabled={readOnly} checked={form.allDay} onChange={(e) => set('allDay', e.target.checked)} className="accent-stone-900" />
           하루 종일 / 여러 날
           {overnight && <span className="ml-auto text-xs text-amber-700">다음 날 {form.endTime}에 끝나요</span>}
@@ -114,8 +114,8 @@ export default function EventModal({ event, defaultDate, onClose }) {
 
         {!isTeamEvent && (
           <div>
-            <div className="mb-2 text-xs text-stone-500">공개 범위</div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="label mb-2">공개 범위</div>
+            <div className="grid grid-cols-3 gap-2">
               {VISIBILITY.map(({ key, label, desc, icon: Icon }) => {
                 const on = form.visibility === key
                 return (
@@ -124,11 +124,13 @@ export default function EventModal({ event, defaultDate, onClose }) {
                     key={key}
                     disabled={readOnly}
                     onClick={() => set('visibility', key)}
-                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition ${
-                      on ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900' : 'border-stone-200 hover:bg-stone-50'
+                    className={`flex flex-col items-start gap-2 rounded-2xl p-3 text-left transition ${
+                      on ? 'bg-white shadow-card ring-[1.5px] ring-brand' : 'bg-canvas hover:bg-stone-100'
                     }`}
                   >
-                    <Icon size={18} className={on ? 'text-stone-900' : 'text-stone-400'} />
+                    <span className={`flex size-7 items-center justify-center rounded-lg ${on ? 'bg-brand-soft text-brand' : 'bg-white text-stone-400'}`}>
+                      <Icon size={15} />
+                    </span>
                     <span>
                       <span className="block text-sm font-semibold">{label}</span>
                       <span className="block text-xs text-stone-500">{desc}</span>
@@ -190,32 +192,26 @@ function Preview({ form, owner, teamName }) {
   const title = form.title.trim() || '제목 없음'
   const views = {
     public: { block: 'full', note: '모든 팀이 제목과 시간을 그대로 봐요.' },
-    team: { block: 'full', note: `${teamName ?? '선택한 팀'}에게만 이렇게 보이고, 다른 팀에는 바쁨으로 보여요.` },
-    busy: { block: 'busy', note: '무슨 일정인지는 숨기고 시간만 막아 둬요.' },
-    private: { block: 'hidden', note: '팀원에겐 빈 시간처럼 보이지만, 추천 시간을 계산할 땐 이 시간을 피해요.' },
+    team: { block: 'full', note: `${teamName ?? '선택한 팀'}에게만 이렇게 보이고, 다른 팀에는 보이지 않아요.` },
+    busy: { block: 'hidden', note: '팀원에겐 보이지 않아요. 이 시간은 내 가능한 시간에서 빠지고, 추천 시간을 계산할 때도 피해요.' },
   }
-  const v = views[form.visibility]
+  const v = views[form.visibility] ?? views.busy
 
   return (
-    <div className="rounded-xl bg-stone-50 p-3">
+    <div className="rounded-2xl bg-canvas p-3.5">
       <div className="mb-2 flex items-center gap-1.5 text-xs text-stone-500">
         <Eye size={13} /> 팀원 화면에서는 이렇게 보여요
       </div>
-      <div className="flex h-9 items-center rounded-lg border border-dashed border-stone-300 bg-white px-1">
+      <div className="flex h-10 items-center rounded-xl bg-white px-1.5 shadow-card">
         {v.block === 'full' && (
-          <div className="w-full truncate rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-900">
+          <div className="w-full truncate rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-900">
             {owner} · {title} <span className="text-emerald-700/70">{time}</span>
           </div>
         )}
-        {v.block === 'busy' && (
-          <div className="busy-stripe w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-xs text-stone-500">
-            {owner} · 바쁨 <span className="text-stone-400">{time}</span>
-          </div>
-        )}
-        {v.block === 'hidden' && <div className="px-2 text-xs text-stone-400">(비어 있는 것처럼 보여요)</div>}
+        {v.block === 'hidden' && <div className="px-2 text-xs text-stone-400">(보이지 않아요 · 이 시간은 가능한 시간에서 빠져요)</div>}
       </div>
       <p className="mt-2 flex items-start gap-1 text-xs text-stone-500">
-        {form.visibility === 'private' && <Lock size={12} className="mt-0.5 shrink-0" />}
+        {form.visibility === 'busy' && <Lock size={12} className="mt-0.5 shrink-0" />}
         {v.note}
       </p>
     </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useStore } from '../store/AppStore'
 import { Avatar, Button, inputClass } from '../components/ui'
+import { Logo } from '../components/Layout'
 
 export default function LoginPage() {
   const { state, me, login, signup } = useStore()
@@ -33,13 +34,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(60rem_30rem_at_50%_-10%,var(--color-brand-soft),transparent)] p-6">
       <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-2xl font-bold tracking-tight">작심365</h1>
-        <p className="mb-6 text-sm text-stone-500">달력과 시간표를 한 화면에서, 팀 약속은 자동으로.</p>
+        <Logo size="lg" />
+        <h1 className="mb-7 mt-5 text-[26px] font-bold leading-snug tracking-tight">
+          달력과 시간표를 한 화면에,
+          <br />
+          팀 약속은 <span className="text-brand">자동으로.</span>
+        </h1>
 
-        <div className="rounded-2xl border border-stone-200 bg-white p-5">
-          <div className="mb-4 grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm">
+        <div className="card p-5">
+          <div className="mb-4 grid grid-cols-2 rounded-xl bg-stone-100 p-1 text-sm">
             {[
               ['login', '로그인'],
               ['signup', '회원가입'],
@@ -47,7 +52,7 @@ export default function LoginPage() {
               <button
                 key={k}
                 onClick={() => (setMode(k), setError(''))}
-                className={`rounded-md py-1.5 ${mode === k ? 'bg-white font-semibold shadow-sm' : 'text-stone-500'}`}
+                className={`rounded-lg py-1.5 transition ${mode === k ? 'bg-white font-semibold shadow-card' : 'text-stone-500'}`}
               >
                 {label}
               </button>
@@ -58,20 +63,20 @@ export default function LoginPage() {
             <input value={form.email} onChange={set('email')} placeholder="name@ulsan.ac.kr" type="email" className={inputClass} />
             <input value={form.password} onChange={set('password')} placeholder="비밀번호" type="password" className={inputClass} />
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button variant="primary" className="w-full py-2">
+            <Button variant="primary" className="h-10 w-full">
               {mode === 'login' ? '로그인' : '가입하기'}
             </Button>
           </form>
         </div>
 
         <div className="mt-6">
-          <p className="mb-2 text-xs text-stone-400">데모 계정으로 바로 시작</p>
+          <p className="label mb-2">데모 계정으로 바로 시작</p>
           <div className="grid grid-cols-2 gap-2">
             {state.profiles.slice(0, 4).map((p) => (
               <button
                 key={p.id}
                 onClick={() => (login(p.id), navigate('/'))}
-                className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white p-2.5 text-left text-sm hover:bg-stone-50"
+                className="flex items-center gap-2.5 rounded-2xl bg-white p-2.5 text-left text-sm font-medium shadow-card transition hover:-translate-y-px hover:shadow-pop"
               >
                 <Avatar profile={p} size="sm" />
                 {p.name}

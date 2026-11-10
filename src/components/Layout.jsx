@@ -8,83 +8,99 @@ export default function Layout() {
   const { me } = useStore()
   if (!me) return <Navigate to="/login" replace />
 
+  // 왼쪽 사이드바(바탕색 위) + 오른쪽 본문. 위쪽 머리줄 없이 로고와 내 계정을 사이드바에 둔다 (Notion Calendar 식)
   return (
-    <div className="flex h-screen flex-col">
-      <Header />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="min-w-0 flex-1 overflow-auto">
-          <Outlet />
-        </main>
-      </div>
+    <div className="flex h-screen">
+      <Sidebar />
+      <main className="min-w-0 flex-1 overflow-auto">
+        <Outlet />
+      </main>
     </div>
   )
 }
 
-function Header() {
-  const { me, logout } = useStore()
-  const [open, setOpen] = useState(false)
+export function Logo({ size = 'md' }) {
+  const big = size === 'lg'
+  return (
+    <span className="flex items-center gap-2">
+      <span className={`flex items-center justify-center rounded-[10px] bg-brand font-black text-white shadow-[inset_0_-2px_0_rgb(0_0_0/0.15)] ${big ? 'size-9 text-base' : 'size-7 text-[13px]'}`}>
+        작
+      </span>
+      <span className={`font-bold tracking-tight ${big ? 'text-2xl' : 'text-[16px]'}`}>
+        작심<span className="text-brand">365</span>
+      </span>
+    </span>
+  )
+}
+
+const navClass = ({ isActive }) =>
+  `flex h-9 items-center gap-2.5 rounded-xl px-3 text-sm transition ${
+    isActive ? 'bg-white font-semibold text-ink shadow-card' : 'text-stone-600 hover:bg-stone-900/5 hover:text-ink'
+  }`
+
+function Sidebar() {
+  const { me, myTeams, logout } = useStore()
+  const [teamModal, setTeamModal] = useState(false)
+  const [menu, setMenu] = useState(false)
   const navigate = useNavigate()
 
   return (
-    <header className="flex h-14 shrink-0 items-center border-b border-stone-200 bg-white px-5">
-      <span className="text-[17px] font-bold tracking-tight">작심365</span>
-      <div className="relative ml-auto">
-        <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-stone-100">
-          <Avatar profile={me} size="sm" />
-          <span className="text-sm">{me.name}</span>
+    <aside className="flex w-60 shrink-0 flex-col px-3 pb-3 pt-5">
+      <div className="mb-6 px-2">
+        <Logo />
+      </div>
+
+      <nav className="flex flex-col gap-1">
+        <NavLink to="/" end className={navClass}>
+          <CalendarDays size={17} /> 내 달력
+        </NavLink>
+        <NavLink to={myTeams[0] ? `/teams/${myTeams[0].id}` : '/settings'} className={() => navClass({ isActive: false })}>
+          <Users size={17} /> 팀
+        </NavLink>
+        <NavLink to="/settings" className={navClass}>
+          <Settings size={17} /> 설정
+        </NavLink>
+      </nav>
+
+      <div className="label mb-1.5 mt-7 flex items-center px-3">
+        내 팀
+        <button onClick={() => setTeamModal(true)} className="ml-auto rounded-md p-0.5 text-stone-400 hover:bg-stone-900/5 hover:text-ink" aria-label="팀 만들기 또는 참여">
+          <Plus size={14} />
         </button>
-        {open && (
-          <div className="absolute right-0 top-11 z-40 w-48 rounded-xl border border-stone-200 bg-white p-1 shadow-lg">
+      </div>
+      <div className="flex flex-col gap-1">
+        {myTeams.map((t) => (
+          <NavLink key={t.id} to={`/teams/${t.id}`} className={navClass}>
+            <span className="size-2.5 rounded-[4px]" style={{ background: t.color }} />
+            {t.name}
+          </NavLink>
+        ))}
+        {myTeams.length === 0 && <p className="px-3 text-xs text-stone-400">아직 팀이 없어요.</p>}
+      </div>
+
+      <div className="relative mt-auto">
+        {menu && (
+          <div className="absolute inset-x-0 bottom-12 z-40 rounded-2xl bg-white p-1 shadow-pop">
             <div className="px-3 py-2 text-xs text-stone-500">{me.email}</div>
             <button
               onClick={() => {
                 logout()
                 navigate('/login')
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone-100"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-stone-100"
             >
               <LogOut size={15} /> 로그아웃
             </button>
           </div>
         )}
-      </div>
-    </header>
-  )
-}
-
-const navClass = ({ isActive }) =>
-  `flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-stone-100 font-semibold text-stone-900' : 'text-stone-600 hover:bg-stone-50'}`
-
-function Sidebar() {
-  const { myTeams } = useStore()
-  const [teamModal, setTeamModal] = useState(false)
-
-  return (
-    <aside className="flex w-56 shrink-0 flex-col gap-0.5 border-r border-stone-200 bg-white p-3">
-      <NavLink to="/" end className={navClass}>
-        <CalendarDays size={17} /> 내 달력
-      </NavLink>
-      <NavLink to={myTeams[0] ? `/teams/${myTeams[0].id}` : '/settings'} className={() => navClass({ isActive: false })}>
-        <Users size={17} /> 팀
-      </NavLink>
-      <NavLink to="/settings" className={navClass}>
-        <Settings size={17} /> 설정
-      </NavLink>
-
-      <div className="mb-1 mt-5 flex items-center px-3 text-xs text-stone-400">
-        내 팀
-        <button onClick={() => setTeamModal(true)} className="ml-auto rounded p-0.5 hover:bg-stone-100" aria-label="팀 만들기 또는 참여">
-          <Plus size={14} />
+        <button onClick={() => setMenu((v) => !v)} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left hover:bg-stone-900/5">
+          <Avatar profile={me} size="sm" />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{me.name}</span>
+            <span className="block truncate text-[11px] text-stone-400">{me.email}</span>
+          </span>
         </button>
       </div>
-      {myTeams.map((t) => (
-        <NavLink key={t.id} to={`/teams/${t.id}`} className={navClass}>
-          <span className="size-2 rounded-full" style={{ background: t.color }} />
-          {t.name}
-        </NavLink>
-      ))}
-      {myTeams.length === 0 && <p className="px-3 text-xs text-stone-400">아직 팀이 없어요.</p>}
 
       <TeamModal open={teamModal} onClose={() => setTeamModal(false)} />
     </aside>
@@ -124,19 +140,21 @@ function TeamModal({ open, onClose }) {
 
   return (
     <Modal open={open} onClose={close} title="팀 만들기 · 참여" width="max-w-sm">
-      <div className="space-y-5 p-5">
+      <div className="space-y-5 px-6 pb-6 pt-3">
         <form onSubmit={onCreate} className="space-y-2">
-          <label className="text-xs text-stone-500">새 팀 만들기</label>
+          <label className="label">새 팀 만들기</label>
           <div className="flex gap-2">
             <input value={name} onChange={(e) => (setName(e.target.value), setError(''))} placeholder="소공 6조" className={inputClass} />
-            <Button variant="primary">만들기</Button>
+            <Button variant="primary" className="h-10 shrink-0">
+              만들기
+            </Button>
           </div>
         </form>
         <form onSubmit={onJoin} className="space-y-2">
-          <label className="text-xs text-stone-500">초대 코드로 참여</label>
+          <label className="label">초대 코드로 참여</label>
           <div className="flex gap-2">
             <input value={code} onChange={(e) => (setCode(e.target.value), setError(''))} placeholder="SWE6-2026" className={inputClass} />
-            <Button>참여</Button>
+            <Button className="h-10 shrink-0">참여</Button>
           </div>
         </form>
         {error && <p className="text-sm text-red-600">{error}</p>}

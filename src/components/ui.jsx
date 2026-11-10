@@ -23,12 +23,12 @@ export function Modal({ open, onClose, title, width = 'max-w-lg', children }) {
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
-      <div className={`w-full ${width} rounded-2xl bg-white shadow-xl`} onMouseDown={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <div className={`w-full ${width} rounded-3xl bg-white shadow-pop`} onMouseDown={(e) => e.stopPropagation()}>
         {title && (
-          <div className="flex items-center border-b border-stone-200 px-5 py-3.5">
-            <h2 className="text-[15px] font-semibold">{title}</h2>
-            <button onClick={onClose} className="ml-auto rounded-md p-1 text-stone-400 hover:bg-stone-100" aria-label="닫기">
+          <div className="flex items-center px-6 pb-1 pt-5">
+            <h2 className="text-base font-bold tracking-tight">{title}</h2>
+            <button onClick={onClose} className="ml-auto rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700" aria-label="닫기">
               <X size={18} />
             </button>
           </div>
@@ -53,18 +53,18 @@ export function Avatar({ profile, size = 'md', ring = false }) {
 
 export function Button({ variant = 'secondary', className = '', ...props }) {
   const styles = {
-    primary: 'bg-stone-900 text-white hover:bg-stone-700',
-    secondary: 'border border-stone-300 bg-white hover:bg-stone-100',
-    ghost: 'hover:bg-stone-100',
+    primary: 'bg-ink text-white shadow-[0_1px_2px_rgb(0_0_0/0.15),inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-stone-700',
+    secondary: 'bg-white text-ink shadow-[0_0_0_1px_rgb(31_29_26/0.1),0_1px_2px_rgb(31_29_26/0.05)] hover:bg-stone-50',
+    ghost: 'text-stone-600 hover:bg-stone-900/5 hover:text-ink',
     danger: 'text-red-600 hover:bg-red-50',
   }
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 ${styles[variant]} ${className}`}
+      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-40 ${styles[variant]} ${className}`}
       {...props}
     />
   )
 }
 
 export const inputClass =
-  'h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200'
+  'h-10 w-full rounded-xl bg-white px-3.5 text-sm shadow-[0_0_0_1px_rgb(31_29_26/0.1)] outline-none transition placeholder:text-stone-400 focus:shadow-[0_0_0_1.5px_var(--color-brand),0_0_0_5px_var(--color-brand-soft)] disabled:bg-stone-50 disabled:text-stone-500'

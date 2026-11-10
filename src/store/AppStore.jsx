@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { makeDemoData, PROFILES } from '../data/demo'
+import { startOfWeek, format, parseISO } from 'date-fns'
+import { makeDemoData, PROFILES, TEAMS } from '../data/demo'
 import { teamsOf, TEAM_COLORS } from '../lib/events'
 import { DEFAULT_PREFS } from '../lib/recommend'
 
@@ -8,7 +9,8 @@ import { DEFAULT_PREFS } from '../lib/recommend'
 const KEY = 'jaksim365-demo-v4'
 // 데모 데이터를 새로 추가하면 올린다. 저장된 데이터는 지우지 않고 빠진 것만 채운다.
 //   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대, 5: 하루 종일 일정 예시, 6: 투표 예시, 8: 투표를 사람마다 원하는 시간 하나로
-const SEED = 8
+//   9: 비공개·바쁨 통합, 팀장, 정할 일정을 날짜 대신 주 단위로
+const SEED = 9
 
 function load() {
   try {
@@ -59,6 +61,19 @@ function withNewDemoData(saved) {
       return { ...rest, votes }
     }
     next.requests = next.requests.map((r) => (r.candidates ? toPerPerson(r) : r))
+  }
+  if (seed < 9) {
+    next.events = (next.events ?? saved.events).map((e) => (e.visibility === 'private' ? { ...e, visibility: 'busy' } : e))
+    next.events = addMissing(next.events, demo.events.filter((e) => e.id === 'ad2'))
+    next.teams = saved.teams.map((t) => (t.leader_id ? t : { ...t, leader_id: TEAMS.find((d) => d.id === t.id)?.leader_id ?? t.members[0] }))
+    const toWeek = (date) => format(startOfWeek(parseISO(date), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+    next.requests = next.requests.map((r) => {
+      if (r.week) return r
+      const { date, ...rest } = r
+      // 데모 '자료 조사 회의'는 차선책 예시가 되도록 새 데모와 같은 주로 옮긴다
+      const demoWeek = r.id === 'r6' && demo.requests.find((d) => d.id === 'r6')?.week
+      return { ...rest, week: demoWeek || toWeek(date) }
+    })
   }
   return next
 }
@@ -113,7 +128,14 @@ export function AppStoreProvider({ children }) {
           ...s,
           teams: [
             ...s.teams,
-            { id, name, color: TEAM_COLORS[s.teams.length % TEAM_COLORS.length], invite_code: inviteCode(), members: [s.currentUserId] },
+            {
+              id,
+              name,
+              color: TEAM_COLORS[s.teams.length % TEAM_COLORS.length],
+              invite_code: inviteCode(),
+              leader_id: s.currentUserId,
+              members: [s.currentUserId],
+            },
           ],
         }))
         return id
@@ -126,7 +148,7 @@ export function AppStoreProvider({ children }) {
           ),
         })),
 
-      // { title, date: 'yyyy-MM-dd', duration: 분 }
+      // 팀장이 넣는 '이 주 안에 해야 할 일': { title, week: 그 주 월요일 'yyyy-MM-dd', duration: 분 }
       addRequest: (teamId, request) =>
         setState((s) => ({
           ...s,

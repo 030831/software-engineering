@@ -1,14 +1,46 @@
 @import "tailwindcss";
 
+/*
+ * 디자인 기준 (Amie · Notion Calendar 참고: 따뜻한 미니멀 + 파스텔 일정)
+ * - 바탕(canvas)은 따뜻한 회백색, 카드는 흰색 + 테두리 대신 아주 옅은 그림자
+ * - 색은 일정·가능 시간 블록에만 파스텔로 쓰고, 나머지는 먹색(ink)과 회색
+ * - 강조색(brand)은 로고, 지금 보고 있는 메뉴, 1순위 같은 곳에만 아껴 쓴다
+ */
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
   --color-personal: #1d9e75;
+
+  --color-canvas: #f6f5f2;
+  --color-ink: #1f1d1a;
+  --color-brand: #5b54e8;
+  --color-brand-soft: #eeedfd;
+
+  /* 팀원 가능 시간: 0명 → 전원 */
+  --color-avail-0: #efeee9;
+  --color-avail-1: #e4f5ec;
+  --color-avail-2: #c8ebd8;
+  --color-avail-3: #9fdcbd;
+  --color-avail-full: #4dbb89;
+
+  --shadow-card: 0 0 0 1px rgb(31 29 26 / 0.05), 0 1px 2px rgb(31 29 26 / 0.04), 0 4px 16px -8px rgb(31 29 26 / 0.06);
+  --shadow-pop: 0 0 0 1px rgb(31 29 26 / 0.06), 0 12px 32px -8px rgb(31 29 26 / 0.18);
 }
 
 body {
-  @apply bg-stone-50 text-stone-900 antialiased;
+  @apply bg-canvas text-ink antialiased;
+  font-feature-settings: "tnum" 0;
+}
+
+/* 작은 섹션 제목 (Notion Calendar 식 라벨) */
+@utility label {
+  @apply text-[11px] font-semibold tracking-wide text-stone-400;
+}
+
+/* 흰 카드 */
+@utility card {
+  @apply rounded-3xl bg-white shadow-card;
 }
 
 .busy-stripe {
-  background: repeating-linear-gradient(45deg, #f5f5f4, #f5f5f4 4px, #fff 4px, #fff 8px);
+  background: repeating-linear-gradient(135deg, #f3f2ee, #f3f2ee 4px, #fbfaf8 4px, #fbfaf8 8px);
 }

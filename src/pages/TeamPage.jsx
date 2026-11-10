@@ -13,6 +13,7 @@ export default function TeamPage() {
 
   if (!team || !team.members.includes(me.id)) return <Navigate to="/" replace />
   const members = team.members.map((id) => state.profiles.find((p) => p.id === id)).filter(Boolean)
+  const leader = members.find((m) => m.id === team.leader_id)
 
   const copyCode = async () => {
     try {
@@ -25,11 +26,13 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6">
-      <div className="flex items-center gap-3">
-        <span className="size-3 rounded-full" style={{ background: team.color }} />
-        <h1 className="text-xl font-semibold">{team.name}</h1>
-        <span className="text-sm text-stone-400">{members.length}명</span>
+    <div className="mx-auto max-w-6xl space-y-5 p-6 pl-2">
+      <div className="flex items-center gap-3 px-1">
+        <span className="size-3.5 rounded-[5px]" style={{ background: team.color }} />
+        <h1 className="text-[22px] font-bold tracking-tight">{team.name}</h1>
+        <span className="rounded-full bg-white px-2.5 py-0.5 text-xs text-stone-500 shadow-card">
+          {members.length}명{leader && ` · 팀장 ${leader.name}`}
+        </span>
         <div className="ml-auto flex -space-x-1.5">
           {members.map((m) => (
             <Avatar key={m.id} profile={m} size="sm" ring />
@@ -41,7 +44,7 @@ export default function TeamPage() {
         </Button>
       </div>
 
-      <RecommendPanel key={team.id} team={team} members={members} />
+      <RecommendPanel key={team.id} team={team} members={members} leader={leader} />
     </div>
   )
 }

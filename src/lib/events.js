@@ -17,6 +17,13 @@ export function eventColor(ev, teams) {
   return PERSONAL_COLOR
 }
 
+// 파스텔 바탕(일정 색을 옅게 깐 것) 위에 올릴 글자색: 같은 색을 어둡게
+export function shadeText(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  const f = (v) => Math.round(v * 0.55)
+  return `rgb(${f(n >> 16)} ${f((n >> 8) & 255)} ${f(n & 255)})`
+}
+
 export function overlapsDay(ev, day) {
   const ds = startOfDay(day)
   const de = addDays(ds, 1)
