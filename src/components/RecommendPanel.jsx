@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { addDays, addMinutes, format, isSameDay, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { CalendarCheck, Plus, Sparkles } from 'lucide-react'
 import { useStore } from '../store/AppStore'
 import { busyIntervalsFor } from '../lib/events'
-import { startCandidates, weekOptions } from '../lib/recommend'
+import { DAY_END_MIN, DAY_START_MIN, weekOptions } from '../lib/recommend'
 import { Avatar, Button, inputClass } from './ui'
 import MySchedule from './MySchedule'
 
@@ -46,7 +46,7 @@ function reasonsOf(best) {
 }
 
 // 흐름: 팀장이 '이 주에 해야 할 일'(주·길이)을 넣음 → 그 주의 빈 구간을 추천 순서대로 보여줌
-// → 구간을 고르고 시작 시간을 버튼으로 고름 → 확정(한 번만)
+// → 구간을 고르고, 그날 시간 막대(When2meet 식: 되는 시간 초록 / 안 되는 시간 빨강)에서 눌러 고르거나 끌어서 고름 → 확정(한 번만)
 // 모두 되는 시간이 없으면 가장 많이 참석할 수 있는 차선책을 보여준다.
 // 또는 고른 시간에 투표해 팀원들이 원하는 시간을 모으고, 그중 하나로 확정 (임시)
 export default function RecommendPanel({ team, members, leader }) {
@@ -61,6 +61,8 @@ export default function RecommendPanel({ team, members, leader }) {
   const [requestId, setRequestId] = useState(null)
   const [selectedKey, setSelectedKey] = useState(null)
   const [start, setStart] = useState(null)
+  // 고른 시간의 길이(분). 기본은 정할 일정의 길이, 시간 막대에서 끌어 고르면 그 길이
+  const [length, setLength] = useState(60)
   const [confirmed, setConfirmed] = useState(null)
   const [showAll, setShowAll] = useState(false)
   // 같은 일정을 다시 눌러도 아래 표가 그 주로 돌아가도록 누를 때마다 올린다
@@ -77,12 +79,17 @@ export default function RecommendPanel({ team, members, leader }) {
   const shown = showAll ? list : list.slice(0, TOP_N)
   const selected = options.find((o) => optionKey(o) === selectedKey) ?? null
   const myVote = request?.votes?.[me.id] ?? null
-  const slotAt = (t, r = request) => ({ start: toLocal(t), end: toLocal(addMinutes(t, r.duration)) })
+  const end = start && addMinutes(start, length)
+  // 고른 시간이 이 후보 인원만큼 '처음부터 끝까지' 되는지. 안 되면(빨간 시간이 섞였거나 지난 시간) 확정을 막는다
+  const freeFor = (s, e) => members.filter((m) => !(busy[m.id] ?? []).some((iv) => iv.start < e.getTime() && iv.end > s.getTime())).length
+  const badPick = Boolean(selected && start && (start < new Date() || freeFor(start, end) < selected.available))
+  const slotAt = (t, len) => ({ start: toLocal(t), end: toLocal(addMinutes(t, len)) })
 
-  // 시작 시간을 바꾸면, 이미 투표했다면 내 투표도 그 시간으로 옮긴다
-  const moveTo = (t) => {
+  // 시간을 바꾸면, 이미 투표했다면 내 투표도 그 시간으로 옮긴다
+  const moveTo = (t, len = request.duration) => {
     setStart(t)
-    if (myVote) setVote(request.id, slotAt(t))
+    setLength(len)
+    if (myVote) setVote(request.id, slotAt(t, len))
   }
 
   const pickOption = (o) => {
@@ -100,13 +107,19 @@ export default function RecommendPanel({ team, members, leader }) {
     setConfirmed(null)
     setShowAll(false)
     const r = requests.find((x) => x.id === id)
+    setLength(r?.duration ?? 60)
     const os = optionsFor(r)
     // 이미 투표했으면 내가 투표한 시간을 골라 둔다
     const voted = r?.votes?.[me.id]
-    const home = voted && os.find((o) => o.start <= parseISO(voted.start) && o.end >= parseISO(voted.end))
+    // 내 투표를 품는 구간, 없으면(끌어서 길게 고른 경우) 같은 날 투표 시작 시간을 품는 구간
+    const home =
+      voted &&
+      (os.find((o) => o.start <= parseISO(voted.start) && o.end >= parseISO(voted.end)) ??
+        os.find((o) => o.start <= parseISO(voted.start) && o.end > parseISO(voted.start)))
     if (home) {
       setSelectedKey(optionKey(home))
       setStart(parseISO(voted.start))
+      setLength((parseISO(voted.end) - parseISO(voted.start)) / 60000)
       // 고른 구간이 처음 보이는 목록 밖이면 펼쳐 둔다
       const homeList = os.some((o) => o.available === o.total) ? os.filter((o) => o.available === o.total) : os
       if (homeList.indexOf(home) >= TOP_N) setShowAll(true)
@@ -118,8 +131,8 @@ export default function RecommendPanel({ team, members, leader }) {
     }
   }
 
-  const confirmAt = (start) => {
-    const end = addMinutes(start, request.duration)
+  const confirmAt = (start, len = length) => {
+    const end = addMinutes(start, len)
     scheduleRequest(request.id, {
       title: request.title,
       start: toLocal(start),
@@ -133,7 +146,7 @@ export default function RecommendPanel({ team, members, leader }) {
     pickRequest(null)
   }
   const onConfirm = () => confirmAt(start)
-  const onVote = () => (myVote ? clearVote(request.id) : setVote(request.id, slotAt(start)))
+  const onVote = () => (myVote ? clearVote(request.id) : setVote(request.id, slotAt(start, length)))
 
   return (
     <>
@@ -228,7 +241,7 @@ export default function RecommendPanel({ team, members, leader }) {
                           >
                             <OptionRow rank={i + 1} option={o} members={members} duration={request.duration} onClick={() => pickOption(o)} />
                             {on && start && (
-                              <SlotButtons option={o} duration={request.duration} start={start} onChange={moveTo} />
+                              <TimeStrip option={o} members={members} busy={busy} duration={request.duration} start={start} length={length} bad={badPick} onChange={moveTo} />
                             )}
                           </div>
                         )
@@ -250,8 +263,8 @@ export default function RecommendPanel({ team, members, leader }) {
                   >
                     {myVote ? '투표 취소' : '투표'}
                   </Button>
-                  <Button variant="primary" disabled={!selected} onClick={onConfirm}>
-                    {selected && start ? `${dayLabel(start)} ${hm(start)}–${hm(addMinutes(start, request.duration))}로 확정` : '시간을 고르세요'}
+                  <Button variant="primary" disabled={!selected || badPick} onClick={onConfirm} title={badPick ? '안 되는 시간이 들어 있어 확정할 수 없어요' : undefined}>
+                    {!selected || !start ? '시간을 고르세요' : badPick ? '안 되는 시간이 있어 확정할 수 없어요' : `${dayLabel(start)} ${hm(start)}–${hm(end)}로 확정`}
                   </Button>
                 </div>
 
@@ -261,7 +274,7 @@ export default function RecommendPanel({ team, members, leader }) {
                   busy={busy}
                   me={me}
                   current={selected && start ? toLocal(start) : null}
-                  onConfirm={(slot) => confirmAt(parseISO(slot.start))}
+                  onConfirm={(slot) => confirmAt(parseISO(slot.start), (parseISO(slot.end) - parseISO(slot.start)) / 60000)}
                 />
               </div>
             )}
@@ -280,9 +293,9 @@ export default function RecommendPanel({ team, members, leader }) {
           start && {
             title: request.title,
             date: format(start, 'yyyy-MM-dd'),
-            duration: request.duration,
+            duration: length,
             start,
-            end: addMinutes(start, request.duration),
+            end,
           }
         }
       />
@@ -334,55 +347,131 @@ function OptionRow({ rank, option: o, members, duration, onClick }) {
   )
 }
 
-// 고른 구간 안에서 시작 시간을 고른다. 한 줄에 하나씩, 많으면 상자 안에서 위아래로 스크롤한다.
-// (예: 13–19시 구간에 2시간 회의면 13:00, 13:30, … 17:00)
-function SlotButtons({ option, duration, start, onChange }) {
-  const candidates = startCandidates(option, duration)
-  const listRef = useRef(null)
-  const firstRef = useRef(true)
+// 그날 9–22시를 30분 칸으로 가로로 늘어놓은 시간 막대 (When2meet 식)
+// - 초록: 이 후보만큼(전원 후보면 전원, 차선책이면 그 인원 이상) 되는 시간 / 빨강: 안 되는 시간 / 줄무늬: 지난 시간
+// - 한 칸을 누르면 그 칸부터 정할 일정 길이만큼, 끌면 끈 만큼 고른다. 고른 시간은 노란 테두리
+// - 마우스를 올리면 몇 명이 되는지만 보여준다 (안 되는 사람은 표시하지 않는다)
+const CELL_MIN = 30
+const CELLS = (DAY_END_MIN - DAY_START_MIN) / CELL_MIN
 
-  // 처음 열 때는 고른 시간을 상자 가운데에 두고, 그 뒤로는 상자 밖에 있을 때만 상자 안에서 스크롤한다 (페이지는 움직이지 않게)
-  useEffect(() => {
-    const list = listRef.current
-    const item = list?.querySelector('[data-on="true"]')
-    if (!item) return
-    if (firstRef.current) {
-      firstRef.current = false
-      list.scrollTop = item.offsetTop - (list.clientHeight - item.offsetHeight) / 2
-    } else if (item.offsetTop < list.scrollTop) list.scrollTop = item.offsetTop
-    else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight) {
-      list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight
+// bad: 고른 시간에 안 되는 시간이 섞였는지 (확정 버튼과 같은 기준으로 부모가 계산해 넘긴다). 끄는 중에는 칸 색으로 미리 판단한다
+function TimeStrip({ option, members, busy, duration, start, length, bad, onChange }) {
+  const trackRef = useRef(null)
+  const [drag, setDrag] = useState(null) // { from, to } 칸 번호
+  const [hover, setHover] = useState(null)
+  const day = startOfDay(option.start)
+  const now = new Date()
+  const need = option.available
+
+  const cells = Array.from({ length: CELLS }, (_, i) => {
+    const s = addMinutes(day, DAY_START_MIN + i * CELL_MIN)
+    const e = addMinutes(s, CELL_MIN)
+    const count = members.filter((m) => !(busy[m.id] ?? []).some((iv) => iv.start < e.getTime() && iv.end > s.getTime())).length
+    return { s, e, count, past: e <= now, ok: count >= need }
+  })
+
+  const cellAt = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect()
+    return Math.min(CELLS - 1, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * CELLS)))
+  }
+  const onDown = (e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const i = cellAt(e.clientX)
+    setDrag({ from: i, to: i })
+  }
+  const onMove = (e) => {
+    const i = cellAt(e.clientX)
+    setHover(i)
+    if (drag && drag.to !== i) setDrag({ ...drag, to: i })
+  }
+  const onUp = () => {
+    if (!drag) return
+    const lo = Math.min(drag.from, drag.to)
+    const hi = Math.max(drag.from, drag.to)
+    setDrag(null)
+    if (lo === hi) {
+      // 한 칸만 누르면 정할 일정 길이만큼 (22시를 넘지 않게 앞으로 당긴다)
+      const latest = CELLS * CELL_MIN - duration
+      const startMin = Math.max(0, Math.min(lo * CELL_MIN, latest))
+      onChange(addMinutes(day, DAY_START_MIN + startMin), duration)
+    } else {
+      onChange(cells[lo].s, (hi - lo + 1) * CELL_MIN)
     }
-  }, [start])
+  }
+
+  // 지금 보여줄 선택 범위(분, 9시 기준): 끄는 중이면 끄는 범위, 아니면 고른 시간
+  const sel = drag
+    ? { from: Math.min(drag.from, drag.to) * CELL_MIN, to: (Math.max(drag.from, drag.to) + 1) * CELL_MIN }
+    : { from: (start - day) / 60000 - DAY_START_MIN, to: (start - day) / 60000 - DAY_START_MIN + length }
+  const pct = (min) => `${(min / (CELLS * CELL_MIN)) * 100}%`
+  const selCells = cells.filter((c, i) => i * CELL_MIN < sel.to && (i + 1) * CELL_MIN > sel.from)
+  const hasBad = drag ? selCells.some((c) => !c.ok || c.past) : bad
+  const selStart = addMinutes(day, DAY_START_MIN + sel.from)
+  const selEnd = addMinutes(day, DAY_START_MIN + sel.to)
+  const info = hover !== null ? cells[hover] : null
 
   return (
     <div className="px-3.5 pb-3.5">
-      <div className="mb-1.5 text-[11px] text-stone-400">
-        {candidates.length > 1
-          ? `${hm(option.start)}–${hm(option.end)} 안에서 시간을 고르세요 · ${candidates.length}개`
-          : `${hm(option.start)}–${hm(option.end)}에 딱 맞는 길이예요`}
+      <div className="mb-2 flex items-center gap-3 text-[11px] text-stone-500">
+        <span className="flex items-center gap-1">
+          <span className="size-2.5 rounded-sm bg-emerald-400" /> {need === members.length ? '모두 가능' : `${need}명 이상 가능`}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="size-2.5 rounded-sm bg-rose-300" /> 안 됨
+        </span>
+        <span className="text-stone-400">눌러서 고르거나, 끌어서 원하는 만큼 골라요</span>
+        <span className="ml-auto tabular-nums text-stone-500">
+          {info ? `${hm(info.s)}–${hm(info.e)} · ${info.past ? '지난 시간' : `${info.count}/${members.length}명 가능`}` : ''}
+        </span>
       </div>
-      <div ref={listRef} className="relative max-h-48 space-y-1 overflow-y-auto overscroll-contain rounded-xl bg-canvas p-1.5">
-        {candidates.map((t) => {
-          const on = t.getTime() === start.getTime()
-          const recommended = t.getTime() === option.best.start.getTime()
-          return (
-            <button
-              type="button"
-              key={t.toISOString()}
-              data-on={on}
-              onClick={() => onChange(t)}
-              className={`flex w-full items-center rounded-lg px-3 py-1.5 text-left text-sm tabular-nums transition ${
-                on ? 'bg-amber-100 font-semibold text-amber-900 ring-[1.5px] ring-amber-400' : 'bg-white text-stone-700 hover:text-ink hover:shadow-card'
-              }`}
+
+      <div className="relative select-none">
+        {/* 시간 눈금 */}
+        <div className="relative mb-1 h-3.5">
+          {Array.from({ length: CELLS / 2 + 1 }, (_, h) => (
+            <span
+              key={h}
+              className={`absolute text-[10px] tabular-nums text-stone-400 ${h === 0 ? '' : h === CELLS / 2 ? '-translate-x-full' : '-translate-x-1/2'}`}
+              style={{ left: pct(h * 60) }}
             >
-              {hm(t)}–{hm(addMinutes(t, duration))}
-              {recommended && (
-                <span className="ml-auto rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold text-brand">추천</span>
-              )}
-            </button>
-          )
-        })}
+              {DAY_START_MIN / 60 + h}
+            </span>
+          ))}
+        </div>
+
+        <div
+          ref={trackRef}
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={() => setDrag(null)}
+          onPointerLeave={() => setHover(null)}
+          className="relative flex h-10 cursor-pointer touch-none overflow-hidden rounded-lg"
+        >
+          {/* 칸 사이 흰 선: 30분은 가늘게, 정각은 굵게 (선택 테두리와 위치가 어긋나지 않게 칸 안쪽 테두리로 그린다) */}
+          {cells.map((c, i) => (
+            <div
+              key={i}
+              className={`h-full flex-1 border-white transition-colors ${i === 0 ? '' : i % 2 === 0 ? 'border-l-2' : 'border-l'} ${
+                c.past ? 'busy-stripe' : c.ok ? 'bg-emerald-400 hover:bg-emerald-500' : 'bg-rose-300 hover:bg-rose-400'
+              }`}
+            />
+          ))}
+          <div
+            className={`pointer-events-none absolute inset-y-0 rounded-md border-[2.5px] ${hasBad ? 'border-red-600 bg-red-600/10' : 'border-amber-400 bg-amber-200/30'} shadow-[0_0_0_2px_#fff]`}
+            style={{ left: pct(sel.from), width: pct(sel.to - sel.from) }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-xs">
+        <span className="font-semibold tabular-nums">
+          {hm(selStart)}–{hm(selEnd)}
+        </span>
+        <span className="text-stone-400">{lengthLabel((selEnd - selStart) / 60000)}</span>
+        {(selEnd - selStart) / 60000 !== duration && <span className="text-stone-400">· 정한 길이({lengthLabel(duration)})와 달라요</span>}
+        {hasBad && <span className="ml-auto font-medium text-red-600">안 되는 시간이 들어 있어 확정할 수 없어요</span>}
       </div>
     </div>
   )
