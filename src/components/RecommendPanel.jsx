@@ -131,9 +131,10 @@ export default function RecommendPanel({ team, members, leader }) {
     }
   }
 
-  const confirmAt = (start, len = length) => {
+  const confirmAt = async (start, len = length) => {
     const end = addMinutes(start, len)
-    scheduleRequest(request.id, {
+    const title = request.title
+    await scheduleRequest(request.id, {
       title: request.title,
       start: toLocal(start),
       end: toLocal(end),
@@ -142,8 +143,9 @@ export default function RecommendPanel({ team, members, leader }) {
       team_id: team.id,
       kind: 'team',
     })
-    setConfirmed({ title: request.title, label: `${dayLabel(start)} ${hm(start)}–${hm(end)}`, date: format(start, 'yyyy-MM-dd') })
+    // 고른 일정을 먼저 비우고(이때 안내도 지워진다) 확정 안내를 띄운다
     pickRequest(null)
+    setConfirmed({ title, label: `${dayLabel(start)} ${hm(start)}–${hm(end)}`, date: format(start, 'yyyy-MM-dd') })
   }
   const onConfirm = () => confirmAt(start)
   const onVote = () => (myVote ? clearVote(request.id) : setVote(request.id, slotAt(start, length)))
