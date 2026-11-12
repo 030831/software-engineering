@@ -54,9 +54,11 @@ export function calendarEventsFor(state, userId) {
   return state.events.filter((e) => (e.kind === 'team' ? teamIds.has(e.team_id) : e.owner_id === userId))
 }
 
-// 추천 계산용 바쁜 구간. 공개 범위와 관계없이(완전 비공개 포함) 모두 반영한다.
+// 추천 계산용 바쁜 구간. 공개 범위와 관계없이(바쁨 포함) 모두 반영한다.
 // 개인의 하루 종일 일정은 그날 전체를 막는다. 팀의 하루 종일 일정('스프린트 2' 같은 기간 표시)은 막지 않는다.
+// 서버 모드에서는 팀원의 바쁨 일정이 내려오지 않으므로, 서버가 같은 규칙으로 계산해 준 시간(state.busyRows)을 쓴다.
 export function busyIntervalsFor(state, userId) {
+  if (state.busyRows) return state.busyRows.filter((r) => r.user_id === userId)
   return calendarEventsFor(state, userId)
     .filter((e) => !(e.all_day && e.kind === 'team'))
     .map((e) => ({ start: parseISO(e.start).getTime(), end: parseISO(e.end).getTime() }))

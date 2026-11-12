@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { CalendarDays, LogOut, Plus, Settings, Users } from 'lucide-react'
+import { CalendarDays, LogOut, Plus, Settings, Users, X } from 'lucide-react'
 import { useStore } from '../store/AppStore'
 import { Avatar, Button, inputClass, Modal } from './ui'
 
 export default function Layout() {
-  const { me } = useStore()
+  const { me, ready, error, clearError } = useStore()
+  if (!ready) return <Loading />
   if (!me) return <Navigate to="/login" replace />
 
   // 왼쪽 사이드바(바탕색 위) + 오른쪽 본문. 위쪽 머리줄 없이 로고와 내 계정을 사이드바에 둔다 (Notion Calendar 식)
@@ -13,8 +14,27 @@ export default function Layout() {
     <div className="flex h-screen">
       <Sidebar />
       <main className="min-w-0 flex-1 overflow-auto">
+        {error && (
+          <div className="sticky top-0 z-30 mx-2 mt-3 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700 shadow-card">
+            {error}
+            <button onClick={clearError} className="ml-auto rounded-md p-0.5 hover:bg-red-100" aria-label="닫기">
+              <X size={15} />
+            </button>
+          </div>
+        )}
         <Outlet />
       </main>
+    </div>
+  )
+}
+
+export function Loading() {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center gap-4">
+      <Logo />
+      <div className="h-1 w-24 overflow-hidden rounded-full bg-stone-200">
+        <div className="h-full w-1/3 animate-[loading_1s_ease-in-out_infinite] rounded-full bg-brand" />
+      </div>
     </div>
   )
 }
@@ -83,8 +103,9 @@ function Sidebar() {
           <div className="absolute inset-x-0 bottom-12 z-40 rounded-2xl bg-white p-1 shadow-pop">
             <div className="px-3 py-2 text-xs text-stone-500">{me.email}</div>
             <button
-              onClick={() => {
-                logout()
+              onClick={async () => {
+                setMenu(false)
+                await logout()
                 navigate('/login')
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-stone-100"
@@ -108,7 +129,8 @@ function Sidebar() {
 }
 
 function TeamModal({ open, onClose }) {
-  const { state, createTeam, joinTeam } = useStore()
+  const { createTeam, joinTeamByCode } = useStore()
+  const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
@@ -121,21 +143,26 @@ function TeamModal({ open, onClose }) {
     onClose()
   }
 
-  const onCreate = (e) => {
+  const onCreate = async (e) => {
     e.preventDefault()
     if (!name.trim()) return setError('팀 이름을 입력하세요.')
-    const id = createTeam(name.trim())
+    setBusy(true)
+    const id = await createTeam(name.trim())
+    setBusy(false)
+    if (!id) return setError('팀을 만들지 못했어요.')
     close()
     navigate(`/teams/${id}`)
   }
 
-  const onJoin = (e) => {
+  const onJoin = async (e) => {
     e.preventDefault()
-    const team = state.teams.find((t) => t.invite_code.toUpperCase() === code.trim().toUpperCase())
-    if (!team) return setError('초대 코드를 찾을 수 없어요.')
-    joinTeam(team.id)
+    if (!code.trim()) return setError('초대 코드를 입력하세요.')
+    setBusy(true)
+    const id = await joinTeamByCode(code)
+    setBusy(false)
+    if (!id) return setError('초대 코드를 찾을 수 없어요.')
     close()
-    navigate(`/teams/${team.id}`)
+    navigate(`/teams/${id}`)
   }
 
   return (
@@ -145,7 +172,7 @@ function TeamModal({ open, onClose }) {
           <label className="label">새 팀 만들기</label>
           <div className="flex gap-2">
             <input value={name} onChange={(e) => (setName(e.target.value), setError(''))} placeholder="소공 6조" className={inputClass} />
-            <Button variant="primary" className="h-10 shrink-0">
+            <Button variant="primary" className="h-10 shrink-0" disabled={busy}>
               만들기
             </Button>
           </div>
@@ -154,7 +181,9 @@ function TeamModal({ open, onClose }) {
           <label className="label">초대 코드로 참여</label>
           <div className="flex gap-2">
             <input value={code} onChange={(e) => (setCode(e.target.value), setError(''))} placeholder="SWE6-2026" className={inputClass} />
-            <Button className="h-10 shrink-0">참여</Button>
+            <Button className="h-10 shrink-0" disabled={busy}>
+              참여
+            </Button>
           </div>
         </form>
         {error && <p className="text-sm text-red-600">{error}</p>}

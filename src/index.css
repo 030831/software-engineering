@@ -44,3 +44,8 @@ body {
 .busy-stripe {
   background: repeating-linear-gradient(135deg, #f3f2ee, #f3f2ee 4px, #fbfaf8 4px, #fbfaf8 8px);
 }
+
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

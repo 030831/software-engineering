@@ -3,7 +3,7 @@ import { Button } from '../components/ui'
 import { DEFAULT_PREFS, PERIODS, PREF_LEVELS } from '../lib/recommend'
 
 export default function SettingsPage() {
-  const { me, setPrefs, resetDemo } = useStore()
+  const { mode, me, setPrefs, resetDemo } = useStore()
   const prefs = { ...DEFAULT_PREFS, ...me.prefs }
 
   return (
@@ -41,11 +41,13 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-6">
-        <h2 className="text-[15px] font-bold tracking-tight">데모 데이터</h2>
-        <p className="mb-3 mt-1 text-sm text-stone-500">지금은 Supabase 연결 전이라 이 브라우저에만 저장돼요. 처음 상태로 되돌릴 수 있어요.</p>
-        <Button onClick={resetDemo}>데모 데이터 초기화</Button>
-      </section>
+      {mode === 'demo' && (
+        <section className="card p-6">
+          <h2 className="text-[15px] font-bold tracking-tight">데모 데이터</h2>
+          <p className="mb-3 mt-1 text-sm text-stone-500">지금은 Supabase 연결 전이라 이 브라우저에만 저장돼요. 처음 상태로 되돌릴 수 있어요.</p>
+          <Button onClick={resetDemo}>데모 데이터 초기화</Button>
+        </section>
+      )}
     </div>
   )
 }

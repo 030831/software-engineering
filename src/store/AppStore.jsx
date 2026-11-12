@@ -1,11 +1,21 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { startOfWeek, format, parseISO } from 'date-fns'
 import { makeDemoData, PROFILES, TEAMS } from '../data/demo'
 import { teamsOf, TEAM_COLORS } from '../lib/events'
 import { DEFAULT_PREFS } from '../lib/recommend'
+import { supabase } from '../lib/supabase'
+import { StoreContext, useStore } from './context'
+import { ServerStoreProvider } from './ServerStore'
 
-// 지금은 브라우저(localStorage)에 저장하는 데모 저장소.
-// Supabase를 붙일 때 아래 actions 안쪽만 API 호출로 바꾸면 화면 코드는 그대로 쓸 수 있다.
+export { useStore }
+
+// 저장소 고르기: Supabase 키가 있으면 서버 저장소(ServerStore), 없으면 브라우저(localStorage) 데모 저장소.
+// 두 저장소는 같은 모양의 값(state, me, myTeams, actions)을 넣으므로 화면 코드는 그대로 쓴다.
+export function AppStoreProvider({ children }) {
+  return supabase ? <ServerStoreProvider>{children}</ServerStoreProvider> : <DemoStoreProvider>{children}</DemoStoreProvider>
+}
+
+// 데모 저장소: 브라우저(localStorage)에만 저장한다.
 const KEY = 'jaksim365-demo-v4'
 // 데모 데이터를 새로 추가하면 올린다. 저장된 데이터는 지우지 않고 빠진 것만 채운다.
 //   2: 정해야 할 일정 예시, 3: 시간이 정해진 팀 일정 예시(id가 'te'로 시작), 4: 선호 시간대, 5: 하루 종일 일정 예시, 6: 투표 예시, 8: 투표를 사람마다 원하는 시간 하나로
@@ -81,10 +91,12 @@ function withNewDemoData(saved) {
 const newId = () => crypto.randomUUID()
 const inviteCode = () => Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000)
 
-const StoreContext = createContext(null)
-
-export function AppStoreProvider({ children }) {
+function DemoStoreProvider({ children }) {
   const [state, setState] = useState(() => load() ?? { ...makeDemoData(new Date()), seed: SEED, currentUserId: null })
+
+  // 바로 결과를 돌려줘야 하는 동작(로그인, 초대 코드)은 최신 state를 여기서 읽는다
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   useEffect(() => {
     try {
@@ -96,15 +108,24 @@ export function AppStoreProvider({ children }) {
 
   const actions = useMemo(
     () => ({
+      // 데모 계정 버튼: 비밀번호 없이 바로 로그인
       login: (userId) => setState((s) => ({ ...s, currentUserId: userId })),
+      // 이메일 로그인 (데모라 비밀번호는 검사하지 않는다). 실패하면 오류 문구를 돌려준다
+      signIn: async (email) => {
+        const user = stateRef.current.profiles.find((p) => p.email === email.trim())
+        if (!user) return '가입된 이메일이 아니에요. 아래 데모 계정을 써 보세요.'
+        setState((s) => ({ ...s, currentUserId: user.id }))
+        return null
+      },
       logout: () => setState((s) => ({ ...s, currentUserId: null })),
-      signup: (name, email) => {
+      signUp: async (name, email) => {
         const id = newId()
         setState((s) => ({
           ...s,
           currentUserId: id,
           profiles: [...s.profiles, { id, name, email, color: 'teal', prefs: DEFAULT_PREFS }],
         }))
+        return {}
       },
 
       // 내 선호 시간대 저장: { morning, afternoon, evening }
@@ -140,13 +161,16 @@ export function AppStoreProvider({ children }) {
         }))
         return id
       },
-      joinTeam: (teamId) =>
+      // 초대 코드로 참여: 팀 id를 돌려준다. 코드가 없으면 null
+      joinTeamByCode: async (code) => {
+        const team = stateRef.current.teams.find((t) => t.invite_code.toUpperCase() === code.trim().toUpperCase())
+        if (!team) return null
         setState((s) => ({
           ...s,
-          teams: s.teams.map((t) =>
-            t.id === teamId && !t.members.includes(s.currentUserId) ? { ...t, members: [...t.members, s.currentUserId] } : t,
-          ),
-        })),
+          teams: s.teams.map((t) => (t.id === team.id && !t.members.includes(s.currentUserId) ? { ...t, members: [...t.members, s.currentUserId] } : t)),
+        }))
+        return team.id
+      },
 
       // 팀장이 넣는 '이 주 안에 해야 할 일': { title, week: 그 주 월요일 'yyyy-MM-dd', duration: 분 }
       addRequest: (teamId, request) =>
@@ -185,12 +209,8 @@ export function AppStoreProvider({ children }) {
 
   const value = useMemo(() => {
     const me = state.profiles.find((p) => p.id === state.currentUserId) ?? null
-    return { state, me, myTeams: me ? teamsOf(state.teams, me.id) : [], ...actions }
+    return { mode: 'demo', ready: true, error: '', clearError: () => {}, state, me, myTeams: me ? teamsOf(state.teams, me.id) : [], ...actions }
   }, [state, actions])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
-}
-
-export function useStore() {
-  return useContext(StoreContext)
 }
